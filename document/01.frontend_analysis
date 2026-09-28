@@ -1,0 +1,154 @@
+# Maison De Élégance — Complete Project Analysis & Backend Migration Blueprint
+
+## 1. Project Overview & Current Architecture
+- **Framework**: Next.js 16.3.2 (App Router) with React 19.2.8 & TypeScript.
+- **Current State**: Fullstack hybrid with monolithic structure. Server Components directly query in-memory data (`FALLBACK_PRODUCTS`) or Prisma ORM.
+- **Database**: PostgreSQL with Prisma ORM (`@prisma/client` v7.9.1, `@prisma/adapter-pg`).
+- **Goal**: Extract and build a dedicated standalone backend repository, then safely delete all backend/database code from this frontend repository.
+
+---
+
+## 2. Complete Backend Inventory (Everything Written Here)
+
+### A. Database Layer (`/prisma` & `/src/lib`)
+1. **Prisma Schema** (`prisma/schema.prisma` - 544 lines):
+   - **Enums (9)**: `Role` (SUPER_ADMIN, STORE_ADMIN, STAFF, CUSTOMER), `ProductStatus`, `Gender`, `OrderStatus`, `PaymentStatus`, `PaymentGatewayType`, `DiscountType`, `NotificationType`, `InventoryTransactionType`.
+   - **Models (21)**:
+     - `Store`: Multi-tenant root (name, slug, domain, activeTheme).
+     - Settings: `StoreSettings`, `FeatureSettings`, `ThemeSettings`, `HomepageSettings` (JSON configs).
+     - Auth & Users: `User` (email, passwordHash, role, storeId), `Address`.
+     - Catalog: `Category`, `Subcategory`, `Collection`, `ProductCollection`, `Product`, `ProductImage`, `ProductVariant`.
+     - Inventory: `InventoryTransaction` (restock, sale, adjustment, audit trails).
+     - Customer Data: `Review`, `Wishlist`, `WishlistItem`, `Cart`, `CartItem`.
+     - Discounts: `Coupon` (percentage/fixed, limits, validity), `CouponUsage`.
+     - Orders & Fulfillment: `Order` (orderNumber, status, guest/user, amounts, address JSON), `OrderItem`, `Payment` (gateway, transactionId, rawResponseJson), `ShippingZone`, `TaxRate`.
+     - Logs: `NotificationLog` (channel, recipient, status).
+2. **Database Seed Script** (`prisma/seed.ts` - 352 lines):
+   - Creates default store `maison-elegance`.
+   - Creates Admin (`admin@maison-elegance.com` / `Password123!`) & Customer (`customer@example.com`).
+   - Seeds categories: Women's Couture, Men's Apparel, Luxury Accessories + subcategories.
+   - Seeds products with images and variants (sizes, colors, SKUs, inventory).
+   - Seeds promo coupons: `LUXE10` (10% off min ₹3000) and `WELCOME1000` (₹1000 off min ₹5000).
+3. **Database Client** (`src/lib/prisma.ts`):
+   - PostgreSQL adapter initialization (`@prisma/adapter-pg`).
+
+---
+
+### B. API Routes (`/app/api`)
+1. **Checkout Endpoint** (`POST /app/api/checkout/route.ts`):
+   - Validates input using Zod (`customerName`, `customerEmail`, `customerPhone`, `shippingAddress`, `paymentMethod`, `items`, `couponCode`).
+   - Server-side price calculation and stock verification.
+   - Atomic inventory deduction.
+   - Coupon discount calculation (`LUXE10`, `WELCOME1000`).
+   - Calls `PaymentFactory.getGateway()`.
+   - Dispatches confirmation notifications via `NotificationManager`.
+2. **Payment Verification** (`POST /app/api/payment/verify/route.ts`):
+   - Verifies Razorpay HMAC signature (`orderId`, `paymentGatewayOrderId`, `paymentId`, `signature`).
+3. **Razorpay Webhooks** (`POST /app/api/webhooks/razorpay/route.ts`):
+   - Validates `x-razorpay-signature` using HMAC-SHA256 and `RAZORPAY_WEBHOOK_SECRET`.
+   - Handles `payment.captured` and `order.paid` events.
+4. **Admin Products API** (`app/api/admin/products/route.ts`):
+   - `GET`: Returns list of products.
+   - `POST`: Validates and creates products with variants, images, and inventory.
+5. **Admin Inventory API** (`POST /app/api/admin/inventory/route.ts`):
+   - Adjusts stock levels (`variantId`, `sku`, `delta`, `reason`) and logs transactions.
+
+---
+
+### C. Backend Services & Business Logic (`/src/services`)
+1. **Product Service** (`src/services/product.service.ts`):
+   - `getAllProducts(filters)`: Multi-criteria filtering (category, gender, collection, occasion, fabric, size, color, price range, in-stock, featured, search) and sorting (price, rating, discount, best-seller).
+   - `getProductBySlug(slug)` & `getProductById(id)`.
+   - Fallback system: Queries Prisma DB if connected, else falls back to `FALLBACK_PRODUCTS`.
+2. **Payment Processing Service** (`src/services/payment/*`):
+   - `PaymentGateway` interface (`types.ts`).
+   - `PaymentFactory` (`index.ts`): Returns gateway based on config or checkout selection.
+   - `RazorpayGateway` (`razorpay.service.ts`): Razorpay SDK integration, order creation (paise conversion), signature verification, refund handling.
+   - `CODGateway` (`cod.service.ts`): Cash on Delivery order creation and lifecycle status.
+3. **Notification Service** (`src/services/notification/*`):
+   - `NotificationManager` (`notification.manager.ts`): Order confirmation and shipping update dispatchers.
+   - Multi-channel support: Email and WhatsApp (checks `featureConfig.whatsapp`).
+
+---
+
+### D. Store Configuration & Hardcoded Catalog (`/src/config` & `/src/data`)
+1. **Business Configs**:
+   - `store.config.ts`: Store metadata, currency (`INR` / `₹`), tax settings (12% GST), shipping flat rates & free shipping thresholds (₹2999).
+   - `payment.config.ts`: Active gateway, COD limits (₹25,000), gateway credentials.
+   - `feature.config.ts`: Feature toggles (wishlist, coupons, guestCheckout, cod, reviews, etc.).
+   - `category.config.ts`: Master category list and occasion lookbooks.
+   - `promotions.config.ts`: Active marketing campaigns (`FESTIVE20`).
+   - `theme.config.ts`: 8 preset luxury design themes.
+2. **Catalog Data** (`src/data/products.data.ts` - 412 lines):
+   - Complete product catalog, variant records, colors, sizes, fabric details, care instructions, and reviews.
+
+---
+
+## 3. Frontend Pages & Their Backend Dependencies
+
+| Page / Component | What It Renders | Current Backend Dependency | Migration Action |
+| :--- | :--- | :--- | :--- |
+| `app/page.tsx` | Home page, Hero, Categories, Featured products | Calls `ProductService.getAllProducts()` via `FeaturedProducts.tsx` | Call `GET /api/v1/products?featured=true` |
+| `app/products/page.tsx` | Product catalog with filters and sorting | Calls `ProductService.getAllProducts()` server-side | Call `GET /api/v1/products?[filters]` |
+| `app/products/[slug]/page.tsx` | Product detail page & related items | Calls `ProductService.getProductBySlug()` | Call `GET /api/v1/products/:slug` |
+| `app/collections/page.tsx` | Lookbook capsules | Calls `ProductService.getAllCollections()` | Call `GET /api/v1/collections` |
+| `app/checkout/page.tsx` | Multi-step checkout & payment choice | Local state + Zustand `cart.store.ts` (has mock order trigger) | Submit to `POST /api/v1/checkout` |
+| `app/order-success/[orderId]/page.tsx` | Order confirmation & tracking status | Reads URL params | Call `GET /api/v1/orders/:orderId` |
+| `app/admin/products/page.tsx` | Product list, create, delete | Local state with `FALLBACK_PRODUCTS` | Call `GET` & `POST /api/v1/admin/products` |
+| `app/admin/inventory/page.tsx` | Stock adjustment and auditing | Local state with `FALLBACK_PRODUCTS` variants | Call `GET` & `POST /api/v1/admin/inventory` |
+| `app/admin/orders/page.tsx` & `[id]` | Orders list and invoice details | Uses `SAMPLE_ADMIN_ORDERS` mock array | Call `GET /api/v1/admin/orders` |
+| `app/admin/settings/page.tsx` | Feature flag toggles & Theme switcher | Modifies in-memory `featureConfig` | Call `GET` & `PUT /api/v1/admin/settings` |
+
+---
+
+## 4. API Endpoints Needed for the New Backend Repository
+
+### Authentication & Users
+- `POST /api/v1/auth/register` (Customer registration)
+- `POST /api/v1/auth/login` (Admin and customer login, JWT cookie)
+- `GET /api/v1/auth/me` (Profile and address book)
+
+### Products & Catalog
+- `GET /api/v1/products` (Filters: category, size, color, price, gender, sort, search)
+- `GET /api/v1/products/:slug` (Full product details + variants + reviews)
+- `GET /api/v1/categories` (Categories and subcategories)
+- `GET /api/v1/collections` (Curated lookbooks)
+
+### Cart & Coupons
+- `POST /api/v1/coupons/validate` (Validate coupon code against subtotal)
+
+### Orders & Payments
+- `POST /api/v1/checkout` (Validate cart, deduct inventory, compute taxes/discounts, initialize payment)
+- `POST /api/v1/payments/verify` (Verify Razorpay signature)
+- `POST /api/v1/payments/webhook/razorpay` (Webhook listener for captured payments)
+- `GET /api/v1/orders/:orderId` (Order status and tracking)
+
+### Admin Operations
+- `GET /api/v1/admin/products` & `POST /api/v1/admin/products` & `DELETE /api/v1/admin/products/:id`
+- `GET /api/v1/admin/inventory` & `POST /api/v1/admin/inventory/adjust`
+- `GET /api/v1/admin/orders` & `PATCH /api/v1/admin/orders/:id/status`
+- `GET /api/v1/admin/settings` & `PUT /api/v1/admin/settings`
+
+---
+
+## 5. Deletion & Cleanup Checklist (For This Frontend Repo)
+
+Once your new backend repo is created:
+
+### 1. Delete Files & Folders
+- ❌ `prisma/` (entire directory: `schema.prisma`, `seed.ts`)
+- ❌ `prisma.config.ts`
+- ❌ `src/lib/prisma.ts`
+- ❌ `app/api/` (entire directory: `checkout`, `payment`, `webhooks`, `admin`)
+- ❌ `src/services/payment/`
+- ❌ `src/services/notification/`
+
+### 2. Remove Dependencies from `package.json`
+Run:
+```bash
+npm uninstall @prisma/client @prisma/adapter-pg prisma pg @types/pg bcryptjs @types/bcryptjs razorpay
+```
+
+### 3. Refactor Frontend Data Fetching
+- Add `NEXT_PUBLIC_API_URL=http://localhost:5000` to `.env`.
+- Replace direct `ProductService` queries with HTTP calls to your new backend API.
