@@ -1,0 +1,15 @@
+import { PrismaClient } from '@prisma/client';
+
+const globalForPrisma = globalThis;
+
+/**
+ * Prisma Client singleton to prevent multiple instances
+ * during development hot reloads.
+ */
+const prisma = globalForPrisma.prisma || new PrismaClient();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
+
+export default prisma;

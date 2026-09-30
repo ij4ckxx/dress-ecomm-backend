@@ -1,0 +1,7 @@
+export const AUTH_CONSTANTS = {
+  REFRESH_TOKEN_COOKIE_NAME: 'refreshToken',
+  DEFAULT_ACCESS_TOKEN_EXPIRY: '15m',
+  DEFAULT_REFRESH_TOKEN_EXPIRY: '7d',
+  COOKIE_MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+  BCRYPT_SALT_ROUNDS: 12,
+};

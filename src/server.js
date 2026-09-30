@@ -2,82 +2,51 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
 
-import { PrismaClient } from '@prisma/client';
-
-dotenv.config();
+import { ENV } from './config/env.js';
+import apiRoutes from './routes/index.js';
+import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
-const prisma = new PrismaClient();
-const PORT = process.env.PORT || 5000;
+const PORT = ENV.PORT;
 
 // Global Middlewares
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g., mobile apps, Postman) or matching CLIENT_URL
+      if (!origin || origin === ENV.CLIENT_URL || ENV.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
+app.use(cookieParser(ENV.COOKIE_SECRET));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// Health check endpoints (supports both /api/v1/health and /api/health)
+app.get('/api/v1/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'E-commerce API is running' });
 });
 
-// --- Test Endpoints to verify Neon DB CRUD operations ---
+// Mount Authentication & Main API routes
+// Supports both /api/v1 and /api prefixes
+app.use('/api/v1', apiRoutes);
+app.use('/api', apiRoutes);
 
-// 1. POST: Create a record in Neon DB
-app.post('/api/test', async (req, res) => {
-  try {
-    const { title } = req.body;
-    if (!title) {
-      return res.status(400).json({ success: false, message: 'Please provide a title in request body' });
-    }
-
-    const createdItem = await prisma.testItem.create({
-      data: { title },
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Data successfully inserted into Neon DB!',
-      data: createdItem,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 2. GET: List all test records from Neon DB
-app.get('/api/test', async (req, res) => {
-  try {
-    const items = await prisma.testItem.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-    res.status(200).json({ success: true, count: items.length, data: items });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 3. DELETE: Delete a record by ID from Neon DB
-app.delete('/api/test/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedItem = await prisma.testItem.delete({
-      where: { id: parseInt(id, 10) },
-    });
-
-    res.status(200).json({
-      success: true,
-      message: `Item #${id} successfully deleted from Neon DB!`,
-      data: deletedItem,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+// Global Centralized Error Handler (must be after all routes)
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
+export default app;
