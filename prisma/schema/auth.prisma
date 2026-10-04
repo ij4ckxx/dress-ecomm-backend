@@ -20,6 +20,7 @@ model User {
   accounts      Account[]
   refreshTokens RefreshToken[]
   wishlist      Wishlist?
+  carts         Cart[]
 
   @@index([email])
 }
