@@ -1,0 +1,212 @@
+model Category {
+  id          String     @id @default(uuid())
+  name        String
+  slug        String     @unique
+  description String?
+  imageUrl    String?
+  parentId    String?
+  sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+
+  @@index([slug])
+  @@index([parentId])
+  @@index([isActive])
+}
+
+model Product {
+  id                    String                  @id @default(uuid())
+  name                  String
+  slug                  String                  @unique
+  description           String?
+  brand                 String?
+  sku                   String?                 @unique
+  categoryId            String
+  category              Category                @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  // Pricing Architecture (Decimal 10,2 for safe financial calculation)
+  regularPrice          Decimal                 @db.Decimal(10, 2)
+  salePrice             Decimal?                @db.Decimal(10, 2)
+  offerPrice            Decimal?                @db.Decimal(10, 2)
+
+  // Stock & Status
+  stockQuantity         Int                     @default(0)
+  isActive              Boolean                 @default(true)
+  isFeatured            Boolean                 @default(false)
+
+  // Performance/Aggregated Sort Metrics
+  totalSold             Int                     @default(0)
+  rating                Float                   @default(0)
+  reviewCount           Int                     @default(0)
+
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  images                ProductImage[]
+  variants              ProductVariant[]
+  attributes            ProductAttributeValue[]
+  modifierGroups        ModifierGroup[]
+  wishlistItems         WishlistItem[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([brand])
+  @@index([sku])
+  @@index([regularPrice])
+  @@index([salePrice])
+  @@index([offerPrice])
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([totalSold])
+  @@index([createdAt])
+}
+
+model ProductImage {
+  id          String          @id @default(uuid())
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url         String
+  altText     String?
+  isThumbnail Boolean         @default(false)
+  sortOrder   Int             @default(0)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+
+  @@index([productId])
+  @@index([variantId])
+}
+
+model Attribute {
+  id           String           @id @default(uuid())
+  name         String           // e.g., "Color", "Size", "Material", "RAM"
+  slug         String           @unique
+  isFilterable Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  values       AttributeValue[]
+
+  @@index([slug])
+}
+
+model AttributeValue {
+  id                String                    @id @default(uuid())
+  attributeId       String
+  attribute         Attribute                 @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  value             String                    // e.g., "Black", "XL", "Silk"
+  slug              String
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  products          ProductAttributeValue[]
+  variantAttributes ProductVariantAttribute[]
+
+  @@unique([attributeId, slug])
+  @@index([attributeId])
+  @@index([slug])
+}
+
+model ProductAttributeValue {
+  id               String         @id @default(uuid())
+  productId        String
+  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributeValueId String
+  attributeValue   AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, attributeValueId])
+  @@index([productId])
+  @@index([attributeValueId])
+}
+
+model ProductVariant {
+  id            String                    @id @default(uuid())
+  productId     String
+  product       Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku           String                    @unique
+  name          String?
+  regularPrice  Decimal?                  @db.Decimal(10, 2)
+  salePrice     Decimal?                  @db.Decimal(10, 2)
+  offerPrice    Decimal?                  @db.Decimal(10, 2)
+  stockQuantity Int                       @default(0)
+  isActive      Boolean                   @default(true)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  images        ProductImage[]
+  attributes    ProductVariantAttribute[]
+
+  @@index([productId])
+  @@index([sku])
+}
+
+model ProductVariantAttribute {
+  id               String         @id @default(uuid())
+  variantId        String
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  attributeValueId String
+  attributeValue   AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, attributeValueId])
+  @@index([variantId])
+  @@index([attributeValueId])
+}
+
+model ModifierGroup {
+  id           String           @id @default(uuid())
+  productId    String
+  product      Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name         String
+  isRequired   Boolean          @default(false)
+  minSelection Int              @default(0)
+  maxSelection Int              @default(1)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  options      ModifierOption[]
+
+  @@index([productId])
+}
+
+model ModifierOption {
+  id              String        @id @default(uuid())
+  modifierGroupId String
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  name            String
+  priceDelta      Decimal       @default(0) @db.Decimal(10, 2)
+  isDefault       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([modifierGroupId])
+}
+
+model Wishlist {
+  id        String         @id @default(uuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  items     WishlistItem[]
+
+  @@index([userId])
+}
+
+model WishlistItem {
+  id         String   @id @default(uuid())
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([wishlistId, productId])
+  @@index([wishlistId])
+  @@index([productId])
+}

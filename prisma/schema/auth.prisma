@@ -19,6 +19,7 @@ model User {
 
   accounts      Account[]
   refreshTokens RefreshToken[]
+  wishlist      Wishlist?
 
   @@index([email])
 }

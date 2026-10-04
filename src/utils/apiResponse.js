@@ -8,7 +8,7 @@ import { HTTP_STATUS } from '../constants/httpStatusCodes.js';
  * @param {string} [options.message='Success']
  * @param {any} [options.data=null]
  */
-export const sendSuccess = (res, { statusCode = HTTP_STATUS.OK, message = 'Success', data = null } = {}) => {
+export const sendSuccess = (res, { statusCode = HTTP_STATUS.OK, message = 'Success', data = null, pagination = null } = {}) => {
   const payload = {
     success: true,
     message,
@@ -16,6 +16,10 @@ export const sendSuccess = (res, { statusCode = HTTP_STATUS.OK, message = 'Succe
 
   if (data !== null && data !== undefined) {
     payload.data = data;
+  }
+
+  if (pagination !== null && pagination !== undefined) {
+    payload.pagination = pagination;
   }
 
   return res.status(statusCode).json(payload);

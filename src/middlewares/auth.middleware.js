@@ -82,3 +82,48 @@ export const authorize = (...allowedRoles) => {
     next();
   };
 };
+
+/**
+ * Middleware that optionally authenticates requests.
+ * If a valid JWT token is provided, sets req.user.
+ * If no token or invalid token is provided, sets req.user = null and continues without error.
+ */
+export const optionalAuthenticate = async (req, res, next) => {
+  try {
+    let token = null;
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+
+    if (!token) {
+      req.user = null;
+      return next();
+    }
+
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch {
+      req.user = null;
+      return next();
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.sub },
+      select: { id: true, email: true, name: true, role: true, isActive: true },
+    });
+
+    if (user && user.isActive) {
+      req.user = user;
+    } else {
+      req.user = null;
+    }
+
+    next();
+  } catch {
+    req.user = null;
+    next();
+  }
+};
