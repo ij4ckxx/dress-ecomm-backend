@@ -13,7 +13,11 @@ model User {
   avatarUrl     String?
   phone         String?
   role          Role           @default(CUSTOMER)
+  permissions   String[]       @default([])
   isActive      Boolean        @default(true)
+  createdById   String?
+  creator       User?          @relation("UserHierarchy", fields: [createdById], references: [id])
+  createdUsers  User[]         @relation("UserHierarchy")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -23,6 +27,8 @@ model User {
   carts         Cart[]
 
   @@index([email])
+  @@index([role])
+  @@index([createdById])
 }
 
 model Account {
