@@ -25,6 +25,7 @@ model User {
   refreshTokens RefreshToken[]
   wishlist      Wishlist?
   carts         Cart[]
+  inventoryTransactions InventoryTransaction[]
 
   @@index([email])
   @@index([role])

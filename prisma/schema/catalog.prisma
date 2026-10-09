@@ -39,6 +39,7 @@ model Product {
 
   // Stock & Status
   stockQuantity         Int                     @default(0)
+  lowStockThreshold     Int                     @default(5)
   isActive              Boolean                 @default(true)
   isFeatured            Boolean                 @default(false)
 
@@ -57,6 +58,7 @@ model Product {
   wishlistItems         WishlistItem[]
   cartItems             CartItem[]
   collections           ProductCollection[]
+  inventoryLogs         InventoryTransaction[]
 
   @@index([slug])
   @@index([categoryId])
@@ -140,6 +142,7 @@ model ProductVariant {
   offerPrice    Decimal?                  @db.Decimal(10, 2)
   costPrice     Decimal?                  @db.Decimal(10, 2)
   stockQuantity Int                       @default(0)
+  lowStockThreshold Int                   @default(5)
   isActive      Boolean                   @default(true)
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
@@ -147,6 +150,7 @@ model ProductVariant {
   images        ProductImage[]
   attributes    ProductVariantAttribute[]
   cartItems     CartItem[]
+  inventoryLogs InventoryTransaction[]
 
   @@index([productId])
   @@index([sku])
@@ -251,3 +255,35 @@ model ProductCollection {
   @@index([collectionId])
   @@index([productId])
 }
+
+enum InventoryTransactionType {
+  RESTOCK
+  SALE
+  ADJUSTMENT
+  RETURN
+  DAMAGE
+}
+
+model InventoryTransaction {
+  id             String                   @id @default(uuid())
+  variantId      String?
+  variant        ProductVariant?          @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type           InventoryTransactionType @default(ADJUSTMENT)
+  quantityChange Int
+  previousStock  Int
+  newStock       Int
+  reason         String?
+  referenceId    String?
+  createdById    String?
+  createdBy      User?                    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime                 @default(now())
+
+  @@index([variantId])
+  @@index([productId])
+  @@index([type])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
