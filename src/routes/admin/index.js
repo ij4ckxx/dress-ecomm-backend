@@ -4,6 +4,7 @@ import categoryRoutes from './category.routes.js';
 import collectionRoutes from './collection.routes.js';
 import productRoutes from './product.routes.js';
 import inventoryRoutes from './inventory.routes.js';
+import orderRoutes from './order.routes.js';
 
 const router = Router();
 
@@ -19,5 +20,8 @@ router.use('/products', productRoutes);
 
 // Mount Module 4: Inventory & Stock Ledger Management
 router.use('/inventory', inventoryRoutes);
+
+// Mount Module 5: Order Lifecycle, Fulfillment & Courier Tracking
+router.use('/orders', orderRoutes);
 
 export default router;

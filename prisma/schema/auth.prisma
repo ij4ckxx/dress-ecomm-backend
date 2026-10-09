@@ -26,6 +26,8 @@ model User {
   wishlist      Wishlist?
   carts         Cart[]
   inventoryTransactions InventoryTransaction[]
+  orders        Order[]
+  orderStatusChanges OrderStatusHistory[] @relation("OrderHistoryChanger")
 
   @@index([email])
   @@index([role])

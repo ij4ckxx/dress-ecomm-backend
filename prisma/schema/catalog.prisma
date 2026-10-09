@@ -59,6 +59,7 @@ model Product {
   cartItems             CartItem[]
   collections           ProductCollection[]
   inventoryLogs         InventoryTransaction[]
+  orderItems            OrderItem[]
 
   @@index([slug])
   @@index([categoryId])
@@ -151,6 +152,7 @@ model ProductVariant {
   attributes    ProductVariantAttribute[]
   cartItems     CartItem[]
   inventoryLogs InventoryTransaction[]
+  orderItems    OrderItem[]
 
   @@index([productId])
   @@index([sku])
