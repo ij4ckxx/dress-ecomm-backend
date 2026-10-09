@@ -6,6 +6,7 @@ model Category {
   imageUrl    String?
   parentId    String?
   sortOrder   Int        @default(0)
+  isFeatured  Boolean    @default(false)
   isActive    Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -17,6 +18,7 @@ model Category {
   @@index([slug])
   @@index([parentId])
   @@index([isActive])
+  @@index([isFeatured])
 }
 
 model Product {
@@ -53,6 +55,7 @@ model Product {
   modifierGroups        ModifierGroup[]
   wishlistItems         WishlistItem[]
   cartItems             CartItem[]
+  collections           ProductCollection[]
 
   @@index([slug])
   @@index([categoryId])
@@ -212,5 +215,37 @@ model WishlistItem {
 
   @@unique([wishlistId, productId])
   @@index([wishlistId])
+  @@index([productId])
+}
+
+model Collection {
+  id          String              @id @default(uuid())
+  name        String
+  slug        String              @unique
+  description String?
+  imageUrl    String?
+  isFeatured  Boolean             @default(false)
+  sortOrder   Int                 @default(0)
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  products    ProductCollection[]
+
+  @@index([slug])
+  @@index([isFeatured])
+  @@index([isActive])
+}
+
+model ProductCollection {
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  sortOrder    Int        @default(0)
+  addedAt      DateTime   @default(now())
+
+  @@id([productId, collectionId])
+  @@index([collectionId])
   @@index([productId])
 }
