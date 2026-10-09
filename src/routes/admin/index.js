@@ -9,6 +9,7 @@ import couponRoutes from './coupon.routes.js';
 import promotionRoutes from './promotion.routes.js';
 import settingsRoutes from './settings.routes.js';
 import auditLogRoutes from './auditLog.routes.js';
+import analyticsRoutes from './analytics.routes.js';
 
 const router = Router();
 
@@ -36,5 +37,8 @@ router.use('/promotions', promotionRoutes);
 // Mount Module 7: Store Settings, Feature Flags & Audit Logging
 router.use('/settings', settingsRoutes);
 router.use('/audit-logs', auditLogRoutes);
+
+// Mount Module 8: Performance Analytics & In-Memory Telemetry
+router.use('/analytics', analyticsRoutes);
 
 export default router;
