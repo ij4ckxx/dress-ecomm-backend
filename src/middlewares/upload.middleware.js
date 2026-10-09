@@ -30,3 +30,13 @@ export const uploadMultipleImages = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: imageFilter,
 }).array('images', 5);
+
+/**
+ * Banner image upload middleware (field: 'backgroundImage' or 'image')
+ */
+export const uploadBannerImage = multer({
+  storage: memoryStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: imageFilter,
+}).single('backgroundImage');
+

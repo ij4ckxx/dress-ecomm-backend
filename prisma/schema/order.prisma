@@ -58,6 +58,7 @@ model Order {
   items              OrderItem[]
   payments           Payment[]
   statusHistory      OrderStatusHistory[]
+  couponUsages       CouponUsage[]
 
   @@index([orderNumber])
   @@index([status])

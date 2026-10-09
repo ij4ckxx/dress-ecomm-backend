@@ -1,0 +1,67 @@
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+model Coupon {
+  id                String        @id @default(uuid())
+  code              String        @unique
+  description       String?
+  discountType      DiscountType  @default(PERCENTAGE)
+  discountValue     Decimal       @db.Decimal(10, 2)
+  minOrderAmount    Decimal       @default(0) @db.Decimal(10, 2)
+  maxDiscountAmount Decimal?      @db.Decimal(10, 2)
+  startDate         DateTime
+  endDate           DateTime
+  usageLimit        Int           @default(500)
+  usedCount         Int           @default(0)
+  perUserLimit      Int           @default(1)
+  isActive          Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  usages            CouponUsage[]
+
+  @@index([code])
+  @@index([isActive])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model CouponUsage {
+  id              String   @id @default(uuid())
+  couponId        String
+  coupon          Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId         String?
+  order           Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  discountApplied Decimal  @default(0) @db.Decimal(10, 2)
+  usedAt          DateTime @default(now())
+
+  @@index([couponId])
+  @@index([userId])
+  @@index([orderId])
+}
+
+model PromotionCampaign {
+  id                 String   @id @default(uuid())
+  title              String
+  subtitle           String?
+  badge              String?
+  discountPercentage Int?
+  couponCode         String?
+  startDate          DateTime
+  endDate            DateTime
+  backgroundImage    String?
+  ctaText            String   @default("SHOP THE SALE")
+  ctaLink            String   @default("/products")
+  sortOrder          Int      @default(0)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([startDate])
+  @@index([endDate])
+}

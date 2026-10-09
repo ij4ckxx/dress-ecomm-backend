@@ -28,6 +28,9 @@ model User {
   inventoryTransactions InventoryTransaction[]
   orders        Order[]
   orderStatusChanges OrderStatusHistory[] @relation("OrderHistoryChanger")
+  couponUsages  CouponUsage[]
+  storeConfigsUpdated StoreConfig[] @relation("ConfigUpdater")
+  auditLogs     AuditLog[] @relation("AuditLogs")
 
   @@index([email])
   @@index([role])

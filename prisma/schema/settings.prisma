@@ -1,0 +1,36 @@
+model StoreConfig {
+  id                    String   @id @default("default_store_config")
+  storeName             String   @default("Maison De Élégance")
+  tagline               String?  @default("Haute Couture & Bespoke Eveningwear")
+  currency              String   @default("INR")
+  currencySymbol        String   @default("₹")
+  supportEmail          String   @default("concierge@maisondeelegance.com")
+  supportPhone          String?  @default("+91 98765 43210")
+  activeTheme           String   @default("luxury-fashion")
+  freeShippingThreshold Decimal  @default(2999) @db.Decimal(10, 2)
+  flatShippingRate      Decimal  @default(150) @db.Decimal(10, 2)
+  featuresJson          Json     // Object with boolean feature flags
+  policiesJson          Json?    // Optional object with shipping, returns, and terms text
+  updatedById           String?
+  updatedBy             User?    @relation("ConfigUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt             DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation("AuditLogs", fields: [userId], references: [id], onDelete: SetNull)
+  action      String   // e.g. "CREATE_PRODUCT", "UPDATE_SETTINGS", "CANCEL_ORDER", "ADJUST_STOCK"
+  entity      String   // e.g. "PRODUCT", "ORDER", "STORE_CONFIG", "COUPON", "USER"
+  entityId    String?
+  detailsJson Json?    // Snapshot of metadata, diff, or payload
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([entity])
+  @@index([entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
