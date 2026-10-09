@@ -35,6 +35,7 @@ model Product {
   regularPrice          Decimal                 @db.Decimal(10, 2)
   salePrice             Decimal?                @db.Decimal(10, 2)
   offerPrice            Decimal?                @db.Decimal(10, 2)
+  costPrice             Decimal?                @db.Decimal(10, 2)
 
   // Stock & Status
   stockQuantity         Int                     @default(0)
@@ -137,6 +138,7 @@ model ProductVariant {
   regularPrice  Decimal?                  @db.Decimal(10, 2)
   salePrice     Decimal?                  @db.Decimal(10, 2)
   offerPrice    Decimal?                  @db.Decimal(10, 2)
+  costPrice     Decimal?                  @db.Decimal(10, 2)
   stockQuantity Int                       @default(0)
   isActive      Boolean                   @default(true)
   createdAt     DateTime                  @default(now())
