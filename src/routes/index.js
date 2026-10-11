@@ -3,12 +3,16 @@ import authRoutes from './auth.routes.js';
 import categoryRoutes from './client/category.routes.js';
 import productRoutes from './client/product.routes.js';
 import cartRoutes from './client/cart.routes.js';
+import customerRoutes from './client/customer.routes.js';
 import adminRoutes from './admin/index.js';
 
 const router = Router();
 
 // Mount Auth routes under /auth
 router.use('/auth', authRoutes);
+
+// Mount Customer Account & Profile routes
+router.use('/customer', customerRoutes);
 
 // Mount Customer Category & Product routes
 router.use('/categories', categoryRoutes);
