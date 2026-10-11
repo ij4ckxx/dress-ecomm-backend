@@ -10,8 +10,12 @@ import {
   updateAccountDetails,
   changePassword,
 } from '../../controllers/client/customer.controller.js';
+import addressRoutes from './address.routes.js';
 
 const router = Router();
+
+// Mount Customer Address Management routes under /addresses
+router.use('/addresses', addressRoutes);
 
 /**
  * @route   GET /api/v1/customer/account (or /api/customer/account)

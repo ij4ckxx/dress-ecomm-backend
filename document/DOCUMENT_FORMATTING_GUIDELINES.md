@@ -1,0 +1,1 @@
+Do not change, remove, or add any content. Only improve the document's formatting, layout, headings, spacing, tables, and visual hierarchy to make it professional, clean, and easy for a frontend developer to read and understand. Preserve all original wording, technical details, examples, and structure.

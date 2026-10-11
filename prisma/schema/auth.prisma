@@ -23,6 +23,7 @@ model User {
 
   accounts      Account[]
   refreshTokens RefreshToken[]
+  addresses     Address[]
   wishlist      Wishlist?
   carts         Cart[]
   inventoryTransactions InventoryTransaction[]
