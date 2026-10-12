@@ -303,3 +303,82 @@ export const purgeAnalyticsCacheService = () => {
   purgeCache('analytics:');
   return { message: 'Analytics telemetry cache successfully cleared' };
 };
+
+/**
+ * Retrieves aggregate wishlist customer demand analytics with 60-second caching
+ */
+export const getWishlistAnalyticsService = async () => {
+  const cacheKey = 'analytics:wishlist:overview';
+
+  return getOrSetCache(
+    cacheKey,
+    async () => {
+      const [totalWishlistItems, wishlistsWithItems, groupedProducts] = await Promise.all([
+        prisma.wishlistItem.count(),
+        prisma.wishlist.count({
+          where: {
+            items: { some: {} },
+          },
+        }),
+        prisma.wishlistItem.groupBy({
+          by: ['productId'],
+          _count: {
+            productId: true,
+          },
+          orderBy: {
+            _count: {
+              productId: 'desc',
+            },
+          },
+          take: 10,
+        }),
+      ]);
+
+      const productIds = groupedProducts.map((g) => g.productId);
+      const products = await prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          brand: true,
+          regularPrice: true,
+          salePrice: true,
+          stockQuantity: true,
+          category: { select: { id: true, name: true } },
+          images: {
+            where: { isThumbnail: true },
+            take: 1,
+            select: { url: true },
+          },
+        },
+      });
+
+      const productMap = new Map(products.map((p) => [p.id, p]));
+
+      const topWishlistedProducts = groupedProducts.map((g) => {
+        const prod = productMap.get(g.productId);
+        return {
+          productId: g.productId,
+          wishlistCount: g._count.productId,
+          name: prod?.name || 'Unknown Product',
+          slug: prod?.slug || null,
+          brand: prod?.brand || null,
+          category: prod?.category?.name || 'Uncategorized',
+          regularPrice: prod ? Number(prod.regularPrice) : 0,
+          salePrice: prod?.salePrice ? Number(prod.salePrice) : null,
+          stockQuantity: prod?.stockQuantity ?? 0,
+          thumbnail: prod?.images[0]?.url || null,
+        };
+      });
+
+      return {
+        totalWishlistItems,
+        totalCustomersWithWishlists: wishlistsWithItems,
+        topWishlistedProducts,
+      };
+    },
+    60
+  );
+};
+

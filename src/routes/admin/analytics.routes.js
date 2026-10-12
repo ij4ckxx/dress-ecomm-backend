@@ -5,6 +5,7 @@ import {
   getTopProducts,
   getOrderStatusDistribution,
   purgeAnalyticsCache,
+  getWishlistAnalytics,
 } from '../../controllers/admin/analytics.controller.js';
 import { authenticate, requireAdmin, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validateQuery } from '../../middlewares/validate.js';
@@ -81,6 +82,18 @@ router.post(
   adminLimiter,
   requirePermission(PERMISSIONS.ANALYTICS_READ),
   purgeAnalyticsCache
+);
+
+/**
+ * @route   GET /api/v1/admin/analytics/wishlist
+ * @desc    Get aggregate wishlist demand analytics (top wishlisted products, unique customer count)
+ * @access  Private (Admin with analytics:read)
+ */
+router.get(
+  '/wishlist',
+  adminLimiter,
+  requirePermission(PERMISSIONS.ANALYTICS_READ),
+  getWishlistAnalytics
 );
 
 export default router;

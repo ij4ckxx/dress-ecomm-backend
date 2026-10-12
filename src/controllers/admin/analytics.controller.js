@@ -4,6 +4,7 @@ import {
   getTopProductsService,
   getOrderStatusDistributionService,
   purgeAnalyticsCacheService,
+  getWishlistAnalyticsService,
 } from '../../services/admin/analytics.service.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
@@ -97,3 +98,22 @@ export const purgeAnalyticsCache = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getWishlistAnalytics = async (req, res, next) => {
+  try {
+    const { data, fromCache } = await getWishlistAnalyticsService();
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Wishlist analytics retrieved successfully',
+      data,
+      meta: {
+        fromCache,
+        ttl: 60,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -10,6 +10,7 @@ import couponRoutes from './client/coupon.routes.js';
 import checkoutRoutes from './client/checkout.routes.js';
 import paymentRoutes from './client/payment.routes.js';
 import clientOrderRoutes from './client/order.routes.js';
+import wishlistRoutes from './client/wishlist.routes.js';
 import adminRoutes from './admin/index.js';
 
 const router = Router();
@@ -39,6 +40,10 @@ router.use('/carts', cartRoutes);
 router.use('/checkout', checkoutRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/orders', clientOrderRoutes);
+
+// Mount Wishlist routes
+router.use('/wishlist', wishlistRoutes);
+router.use('/customer/wishlist', wishlistRoutes);
 
 // Mount Admin routes (isolated under /admin)
 router.use('/admin', adminRoutes);
