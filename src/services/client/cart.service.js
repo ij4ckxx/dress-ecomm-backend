@@ -668,7 +668,7 @@ export const addItemToCart = async (context, input) => {
         });
       }
     }
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   const formatted = await getFormattedCartById(cart.id);
   return { ...formatted, guestToken: guestToken || formatted.guestToken };
@@ -797,7 +797,7 @@ export const updateCartItem = async (context, itemId, input) => {
         configHash: newConfigHash,
       },
     });
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   return getFormattedCartById(cart.id);
 };
@@ -1045,7 +1045,7 @@ export const mergeGuestCart = async (userId, guestToken) => {
       where: { id: guestCart.id },
       data: { status: CART_STATUS.CONVERTED },
     });
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   return getFormattedCartById(customerCart.id);
 };

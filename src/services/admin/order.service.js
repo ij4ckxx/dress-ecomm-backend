@@ -1,6 +1,7 @@
 import prisma from '../../config/db.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { Parser } from 'json2csv';
+import { sendCodStatusUpdateEmail } from '../notification/email.service.js';
 
 const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code = 'ERROR') => {
   const error = new Error(message);
@@ -270,7 +271,14 @@ export const updateOrderStatusService = async ({ orderId, adminUser, statusData 
     });
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 30000 });
+
+  // Trigger COD approval customer email
+  if (order.paymentMethod === 'COD' && currentStatus === 'PENDING' && newStatus === 'CONFIRMED') {
+    sendCodStatusUpdateEmail({ order: updatedOrder, approved: true }).catch((err) =>
+      console.error('[EMAIL DISPATCH ERROR]:', err)
+    );
+  }
 
   return updatedOrder;
 };
@@ -316,7 +324,7 @@ export const updateOrderShippingService = async ({ orderId, adminUser, shippingD
     });
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   return updatedOrder;
 };
@@ -461,7 +469,14 @@ export const cancelOrderService = async ({ orderId, adminUser, cancelData }) => 
     }
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 30000 });
+
+  // Trigger COD cancellation customer email
+  if (order.paymentMethod === 'COD') {
+    sendCodStatusUpdateEmail({ order: cancelledOrder, approved: false, reason }).catch((err) =>
+      console.error('[EMAIL DISPATCH ERROR]:', err)
+    );
+  }
 
   return cancelledOrder;
 };

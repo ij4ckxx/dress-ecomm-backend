@@ -65,7 +65,7 @@ export const createAddressService = async (userId, addressData) => {
     });
 
     return createdAddress;
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 };
 
 /**
@@ -186,7 +186,7 @@ export const updateAddressService = async (userId, addressId, updateData) => {
     });
 
     return updatedAddress;
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 };
 
 /**
@@ -230,7 +230,7 @@ export const deleteAddressService = async (userId, addressId) => {
         });
       }
     }
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   return {
     message: 'Address deleted successfully',

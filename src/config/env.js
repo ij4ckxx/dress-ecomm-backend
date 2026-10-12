@@ -20,4 +20,16 @@ export const ENV = {
 
   // Cookies
   COOKIE_SECRET: process.env.COOKIE_SECRET || 'fallback_cookie_secret_dress_ecomm',
+
+  // Razorpay
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder_key',
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'rzp_test_placeholder_secret',
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+
+  // Notifications & SMTP Email
+  SMTP_HOST: process.env.SMTP_HOST || '',
+  SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASS: process.env.SMTP_PASS || '',
+  SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || 'concierge@maisondeelegance.com',
 };

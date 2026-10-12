@@ -6,6 +6,10 @@ import cartRoutes from './client/cart.routes.js';
 import customerRoutes from './client/customer.routes.js';
 import collectionRoutes from './client/collection.routes.js';
 import settingsRoutes from './client/settings.routes.js';
+import couponRoutes from './client/coupon.routes.js';
+import checkoutRoutes from './client/checkout.routes.js';
+import paymentRoutes from './client/payment.routes.js';
+import clientOrderRoutes from './client/order.routes.js';
 import adminRoutes from './admin/index.js';
 
 const router = Router();
@@ -24,9 +28,17 @@ router.use('/collections', collectionRoutes);
 // Mount Public Storefront Settings routes
 router.use('/settings', settingsRoutes);
 
+// Mount Coupon routes
+router.use('/coupons', couponRoutes);
+
 // Mount Cart routes (supports both /cart and /carts)
 router.use('/cart', cartRoutes);
 router.use('/carts', cartRoutes);
+
+// Mount Checkout, Payments & Client Orders routes
+router.use('/checkout', checkoutRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/orders', clientOrderRoutes);
 
 // Mount Admin routes (isolated under /admin)
 router.use('/admin', adminRoutes);
