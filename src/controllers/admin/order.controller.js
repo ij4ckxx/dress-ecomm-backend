@@ -6,6 +6,10 @@ import {
   updateOrderNotesService,
   cancelOrderService,
   exportOrdersCsvService,
+  updateOrderPaymentStatusService,
+  getOrderMetafieldsService,
+  upsertOrderMetafieldService,
+  deleteOrderMetafieldService,
 } from '../../services/admin/order.service.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
@@ -157,3 +161,86 @@ export const exportOrdersCsv = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Record payment collection or update payment status for an order
+ * PATCH /api/v1/admin/orders/:id/payment
+ */
+export const updateOrderPaymentStatus = async (req, res, next) => {
+  try {
+    const updated = await updateOrderPaymentStatusService({
+      orderId: req.params.id,
+      adminUser: req.user,
+      paymentData: req.body,
+    });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: `Order #${updated.orderNumber} payment status updated to ${updated.paymentStatus}`,
+      data: updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Retrieve all metafields for an order (both public and internal)
+ * GET /api/v1/admin/orders/:id/metafields
+ */
+export const getOrderMetafields = async (req, res, next) => {
+  try {
+    const metafields = await getOrderMetafieldsService(req.params.id);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Order metafields fetched successfully',
+      data: metafields,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create or update an order metafield
+ * POST /api/v1/admin/orders/:id/metafields
+ */
+export const upsertOrderMetafield = async (req, res, next) => {
+  try {
+    const metafield = await upsertOrderMetafieldService({
+      orderId: req.params.id,
+      metafieldData: req.body,
+    });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: `Order metafield '${metafield.namespace}.${metafield.key}' saved successfully`,
+      data: metafield,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete an order metafield
+ * DELETE /api/v1/admin/orders/:id/metafields/:metafieldId
+ */
+export const deleteOrderMetafield = async (req, res, next) => {
+  try {
+    const result = await deleteOrderMetafieldService({
+      orderId: req.params.id,
+      metafieldId: req.params.metafieldId,
+    });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: result.message,
+      data: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -198,6 +198,9 @@ export const getOrderByIdService = async (orderId) => {
           },
         },
       },
+      metafields: {
+        orderBy: [{ namespace: 'asc' }, { key: 'asc' }],
+      },
     },
   });
 
@@ -543,3 +546,147 @@ export const exportOrdersCsvService = async ({ query }) => {
   const csv = parser.parse(rows);
   return csv;
 };
+
+/**
+ * Records payment collection or updates payment status (e.g. for COD fulfillment)
+ */
+export const updateOrderPaymentStatusService = async ({ orderId, adminUser, paymentData }) => {
+  const { paymentStatus, transactionId, amount, comment } = paymentData;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { payments: { take: 1, orderBy: { createdAt: 'desc' } } },
+  });
+
+  if (!order) {
+    throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
+  }
+
+  const updatedOrder = await prisma.$transaction(async (tx) => {
+    const updated = await tx.order.update({
+      where: { id: orderId },
+      data: { paymentStatus },
+    });
+
+    const paymentAmount = amount !== undefined && amount !== null ? amount : order.totalAmount;
+
+    if (order.payments.length > 0) {
+      await tx.payment.update({
+        where: { id: order.payments[0].id },
+        data: {
+          status: paymentStatus,
+          transactionId: transactionId || order.payments[0].transactionId,
+          amount: paymentAmount,
+        },
+      });
+    } else {
+      await tx.payment.create({
+        data: {
+          orderId,
+          gateway: order.paymentMethod,
+          amount: paymentAmount,
+          status: paymentStatus,
+          transactionId,
+        },
+      });
+    }
+
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId,
+        previousStatus: order.status,
+        newStatus: order.status,
+        comment: comment || `Payment status updated to ${paymentStatus} by ${adminUser.name || 'Admin'}`,
+        changedById: adminUser.id,
+      },
+    });
+
+    return updated;
+  }, { maxWait: 10000, timeout: 30000 });
+
+  return updatedOrder;
+};
+
+/**
+ * Retrieves all metafields (both public and private) for an order
+ */
+export const getOrderMetafieldsService = async (orderId) => {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true },
+  });
+
+  if (!order) {
+    throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
+  }
+
+  const metafields = await prisma.orderMetafield.findMany({
+    where: { orderId },
+    orderBy: [{ namespace: 'asc' }, { key: 'asc' }],
+  });
+
+  return metafields;
+};
+
+/**
+ * Creates or updates an order metafield (supports public customer-visible or private operational)
+ */
+export const upsertOrderMetafieldService = async ({ orderId, metafieldData }) => {
+  const { namespace, key, value, valueType = 'STRING', description = null, isPublic = true } = metafieldData;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true },
+  });
+
+  if (!order) {
+    throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
+  }
+
+  const metafield = await prisma.orderMetafield.upsert({
+    where: {
+      orderId_namespace_key: {
+        orderId,
+        namespace,
+        key,
+      },
+    },
+    create: {
+      orderId,
+      namespace,
+      key,
+      value,
+      valueType,
+      description,
+      isPublic,
+    },
+    update: {
+      value,
+      valueType,
+      description,
+      isPublic,
+    },
+  });
+
+  return metafield;
+};
+
+/**
+ * Deletes an order metafield by ID
+ */
+export const deleteOrderMetafieldService = async ({ orderId, metafieldId }) => {
+  const metafield = await prisma.orderMetafield.findFirst({
+    where: { id: metafieldId, orderId },
+  });
+
+  if (!metafield) {
+    throw createServiceError('Metafield not found', HTTP_STATUS.NOT_FOUND, 'METAFIELD_NOT_FOUND');
+  }
+
+  await prisma.orderMetafield.delete({
+    where: { id: metafieldId },
+  });
+
+  return { success: true, message: 'Order metafield deleted successfully' };
+};
+

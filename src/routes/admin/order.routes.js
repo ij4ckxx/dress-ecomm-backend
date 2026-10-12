@@ -7,6 +7,10 @@ import {
   updateOrderNotes,
   cancelOrder,
   exportOrdersCsv,
+  updateOrderPaymentStatus,
+  getOrderMetafields,
+  upsertOrderMetafield,
+  deleteOrderMetafield,
 } from '../../controllers/admin/order.controller.js';
 import { authenticate, requireAdmin, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
@@ -19,6 +23,9 @@ import {
   updateOrderShippingSchema,
   updateOrderNotesSchema,
   cancelOrderSchema,
+  updatePaymentStatusSchema,
+  orderMetafieldSchema,
+  metafieldParamSchema,
 } from '../../validators/admin/order.validator.js';
 
 const router = Router();
@@ -120,4 +127,59 @@ router.post(
   cancelOrder
 );
 
+/**
+ * @route   PATCH /api/v1/admin/orders/:id/payment
+ * @desc    Record payment collection or update payment status
+ * @access  Private (Admin with orders:write)
+ */
+router.patch(
+  '/:id/payment',
+  adminLimiter,
+  requirePermission(PERMISSIONS.ORDERS_WRITE),
+  validateParams(orderParamIdSchema),
+  validate(updatePaymentStatusSchema),
+  updateOrderPaymentStatus
+);
+
+/**
+ * @route   GET /api/v1/admin/orders/:id/metafields
+ * @desc    Get all metafields for an order (both public and internal)
+ * @access  Private (Admin with orders:read)
+ */
+router.get(
+  '/:id/metafields',
+  adminLimiter,
+  requirePermission(PERMISSIONS.ORDERS_READ),
+  validateParams(orderParamIdSchema),
+  getOrderMetafields
+);
+
+/**
+ * @route   POST /api/v1/admin/orders/:id/metafields
+ * @desc    Create or update an order metafield
+ * @access  Private (Admin with orders:write)
+ */
+router.post(
+  '/:id/metafields',
+  adminLimiter,
+  requirePermission(PERMISSIONS.ORDERS_WRITE),
+  validateParams(orderParamIdSchema),
+  validate(orderMetafieldSchema),
+  upsertOrderMetafield
+);
+
+/**
+ * @route   DELETE /api/v1/admin/orders/:id/metafields/:metafieldId
+ * @desc    Delete an order metafield
+ * @access  Private (Admin with orders:write)
+ */
+router.delete(
+  '/:id/metafields/:metafieldId',
+  adminLimiter,
+  requirePermission(PERMISSIONS.ORDERS_WRITE),
+  validateParams(metafieldParamSchema),
+  deleteOrderMetafield
+);
+
 export default router;
+

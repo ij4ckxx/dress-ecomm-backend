@@ -341,6 +341,7 @@ export const placeOrder = async ({ userId, payload }) => {
     const cart = await tx.cart.findFirst({
       where: { customerId: userId, status: 'ACTIVE' },
       include: {
+        metafields: true,
         items: {
           include: {
             product: { include: { images: { where: { isThumbnail: true }, take: 1 } } },
@@ -487,7 +488,28 @@ export const placeOrder = async ({ userId, payload }) => {
       },
     });
 
-    // E. Record Coupon Usage (if applied)
+    // E. Copy Cart Metafields to Order Metafields
+    if (cart.metafields && cart.metafields.length > 0) {
+      const allowedMetafields = cart.metafields.filter(
+        (m) => !['price', 'paymentstatus', 'status', 'total'].includes(m.key.toLowerCase())
+      );
+      if (allowedMetafields.length > 0) {
+        await tx.orderMetafield.createMany({
+          data: allowedMetafields.map((m) => ({
+            orderId: order.id,
+            namespace: m.namespace,
+            key: m.key,
+            value: m.value,
+            valueType: m.valueType,
+            description: null,
+            isPublic: true,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    // F. Record Coupon Usage (if applied)
     if (calculation.appliedCoupon) {
       await tx.couponUsage.create({
         data: {
@@ -654,6 +676,10 @@ export const getOrderConfirmationByNumber = async ({ userId, orderNumber }) => {
       payments: {
         select: { gateway: true, status: true, transactionId: true, amount: true },
       },
+      metafields: {
+        where: { isPublic: true },
+        select: { namespace: true, key: true, value: true, valueType: true, description: true },
+      },
     },
   });
 
@@ -672,6 +698,9 @@ export const getOrderConfirmationByNumber = async ({ userId, orderNumber }) => {
     customerPhone: order.customerPhone,
     shippingAddress: order.shippingAddress,
     billingAddress: order.billingAddress,
+    courierPartner: order.courierPartner || null,
+    trackingNumber: order.trackingNumber || null,
+    estimatedDelivery: order.estimatedDelivery || null,
     items: order.items,
     pricing: {
       subtotal: Number(order.subtotal),
@@ -682,6 +711,7 @@ export const getOrderConfirmationByNumber = async ({ userId, orderNumber }) => {
       currency: 'INR',
     },
     payments: order.payments,
+    metafields: order.metafields,
     createdAt: order.createdAt,
   };
 };

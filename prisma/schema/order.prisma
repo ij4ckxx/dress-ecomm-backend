@@ -59,6 +59,7 @@ model Order {
   payments           Payment[]
   statusHistory      OrderStatusHistory[]
   couponUsages       CouponUsage[]
+  metafields         OrderMetafield[]
 
   @@index([orderNumber])
   @@index([status])
@@ -120,4 +121,22 @@ model OrderStatusHistory {
 
   @@index([orderId])
   @@index([changedById])
+}
+
+model OrderMetafield {
+  id          String             @id @default(uuid())
+  orderId     String
+  order       Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  namespace   String
+  key         String
+  value       String
+  valueType   MetafieldValueType @default(STRING)
+  description String?
+  isPublic    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([orderId, namespace, key])
+  @@index([orderId])
+  @@index([namespace, key])
 }

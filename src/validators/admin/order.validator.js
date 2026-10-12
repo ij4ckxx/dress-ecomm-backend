@@ -74,3 +74,36 @@ export const cancelOrderSchema = z.object({
     .min(3, 'Cancellation reason must be at least 3 characters')
     .max(500, 'Cancellation reason cannot exceed 500 characters'),
 });
+
+export const updatePaymentStatusSchema = z.object({
+  paymentStatus: z.enum(PAYMENT_STATUS_ENUM, {
+    required_error: 'Payment status is required',
+  }),
+  transactionId: z.string().trim().max(100).optional().nullable(),
+  amount: z.coerce.number().min(0).optional().nullable(),
+  comment: z.string().trim().max(500).optional(),
+});
+
+export const orderMetafieldSchema = z.object({
+  namespace: z
+    .string({ required_error: 'Namespace is required' })
+    .trim()
+    .min(1, 'Namespace must be at least 1 character')
+    .max(50, 'Namespace cannot exceed 50 characters'),
+  key: z
+    .string({ required_error: 'Key is required' })
+    .trim()
+    .min(1, 'Key must be at least 1 character')
+    .max(50, 'Key cannot exceed 50 characters'),
+  value: z
+    .string({ required_error: 'Value is required' })
+    .max(5000, 'Value cannot exceed 5000 characters'),
+  valueType: z.enum(['STRING', 'NUMBER', 'BOOLEAN', 'JSON']).default('STRING'),
+  description: z.string().trim().max(255).optional().nullable(),
+  isPublic: z.boolean().default(true),
+});
+
+export const metafieldParamSchema = z.object({
+  id: z.string().uuid('Invalid Order ID format'),
+  metafieldId: z.string().uuid('Invalid Metafield ID format'),
+});

@@ -216,3 +216,48 @@ export const sendCodStatusUpdateEmail = async ({ order, approved, reason = '' })
     text,
   });
 };
+
+/**
+ * Sends order cancellation notification email to customer and store operations
+ * @param {object} params
+ * @param {object} params.order
+ * @param {string} [params.reason]
+ */
+export const sendCustomerOrderCancellationEmail = async ({ order, reason = '' }) => {
+  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || ENV.SUPPORT_EMAIL;
+  const subject = `Order #${order.orderNumber} Cancelled — Maison De Élégance`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e5; border-radius: 8px;">
+      <h2 style="color: #c62828; margin-top: 0;">Order #${order.orderNumber} Cancelled</h2>
+      <p style="color: #444; font-size: 15px;">Dear ${order.customerName}, your order <strong>#${order.orderNumber}</strong> has been cancelled as requested.</p>
+      ${reason ? `<p style="color: #666; background: #f9f9f9; padding: 10px; border-radius: 4px;"><strong>Reason:</strong> ${reason}</p>` : ''}
+      <p style="color: #666;">Reserved inventory has been released. If you need any assistance or have questions, feel free to reply to this email or contact us at <a href="mailto:${ENV.SUPPORT_EMAIL}">${ENV.SUPPORT_EMAIL}</a>.</p>
+    </div>
+  `;
+
+  const text = `Dear ${order.customerName}, your order #${order.orderNumber} has been cancelled.${reason ? ` Reason: ${reason}` : ''}`;
+
+  await sendMailSafe({
+    to: order.customerEmail,
+    subject,
+    html,
+    text,
+  });
+
+  // Notify admin
+  await sendMailSafe({
+    to: adminEmail,
+    subject: `[Customer Notice] Order #${order.orderNumber} Cancelled by Customer`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h3>Customer Cancelled Order #${order.orderNumber}</h3>
+        <p><strong>Customer:</strong> ${order.customerName} (${order.customerEmail})</p>
+        <p><strong>Reason:</strong> ${reason || 'Customer self-service cancellation'}</p>
+        <p><strong>Total:</strong> ₹${order.totalAmount}</p>
+      </div>
+    `,
+    text: `Customer ${order.customerName} cancelled order #${order.orderNumber}. Reason: ${reason || 'N/A'}. Total: ₹${order.totalAmount}`,
+  });
+};
+
