@@ -1,25 +1,35 @@
-import nodemailer from 'nodemailer';
 import { ENV } from '../../config/env.js';
 
 let transporter = null;
+let nodemailerMod = null;
 
 /**
  * Initializes or returns the cached Nodemailer transporter
- * @returns {object|null}
+ * @returns {Promise<object|null>}
  */
-const getTransporter = () => {
+const getTransporter = async () => {
   if (transporter) return transporter;
 
   if (ENV.SMTP_HOST && ENV.SMTP_USER && ENV.SMTP_PASS) {
-    transporter = nodemailer.createTransport({
-      host: ENV.SMTP_HOST,
-      port: ENV.SMTP_PORT,
-      secure: ENV.SMTP_PORT === 465,
-      auth: {
-        user: ENV.SMTP_USER,
-        pass: ENV.SMTP_PASS,
-      },
-    });
+    try {
+      if (!nodemailerMod) {
+        const mod = await import('nodemailer').catch(() => null);
+        nodemailerMod = mod?.default || mod;
+      }
+      if (nodemailerMod) {
+        transporter = nodemailerMod.createTransport({
+          host: ENV.SMTP_HOST,
+          port: ENV.SMTP_PORT,
+          secure: ENV.SMTP_PORT === 465,
+          auth: {
+            user: ENV.SMTP_USER,
+            pass: ENV.SMTP_PASS,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn('[NODEMAILER INIT WARN]:', err.message);
+    }
   }
 
   return transporter;
@@ -32,7 +42,7 @@ const getTransporter = () => {
  */
 const sendMailSafe = async ({ to, subject, html, text }) => {
   try {
-    const activeTransporter = getTransporter();
+    const activeTransporter = await getTransporter();
 
     if (activeTransporter) {
       await activeTransporter.sendMail({

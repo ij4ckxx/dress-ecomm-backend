@@ -1,14 +1,14 @@
 import crypto from 'crypto';
-import Razorpay from 'razorpay';
 import { ENV } from '../../config/env.js';
 
 let razorpayClient = null;
+let RazorpayClass = null;
 
 /**
  * Returns active Razorpay SDK client if valid credentials are present
- * @returns {Razorpay|null}
+ * @returns {Promise<object|null>}
  */
-const getRazorpayClient = () => {
+const getRazorpayClient = async () => {
   if (razorpayClient) return razorpayClient;
 
   if (
@@ -17,10 +17,16 @@ const getRazorpayClient = () => {
     !ENV.RAZORPAY_KEY_ID.includes('placeholder')
   ) {
     try {
-      razorpayClient = new Razorpay({
-        key_id: ENV.RAZORPAY_KEY_ID,
-        key_secret: ENV.RAZORPAY_KEY_SECRET,
-      });
+      if (!RazorpayClass) {
+        const mod = await import('razorpay').catch(() => null);
+        RazorpayClass = mod?.default || mod;
+      }
+      if (RazorpayClass) {
+        razorpayClient = new RazorpayClass({
+          key_id: ENV.RAZORPAY_KEY_ID,
+          key_secret: ENV.RAZORPAY_KEY_SECRET,
+        });
+      }
     } catch (err) {
       console.warn('[RAZORPAY CLIENT WARN]:', err.message);
     }
@@ -43,7 +49,7 @@ export const createRazorpayOrder = async ({
   currency = 'INR',
 }) => {
   const amountInPaise = Math.round(Number(amountInRupees) * 100);
-  const client = getRazorpayClient();
+  const client = await getRazorpayClient();
 
   if (client) {
     const rzpOrder = await client.orders.create({
