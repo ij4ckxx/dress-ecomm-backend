@@ -4,6 +4,8 @@ import categoryRoutes from './client/category.routes.js';
 import productRoutes from './client/product.routes.js';
 import cartRoutes from './client/cart.routes.js';
 import customerRoutes from './client/customer.routes.js';
+import collectionRoutes from './client/collection.routes.js';
+import settingsRoutes from './client/settings.routes.js';
 import adminRoutes from './admin/index.js';
 
 const router = Router();
@@ -14,9 +16,13 @@ router.use('/auth', authRoutes);
 // Mount Customer Account & Profile routes
 router.use('/customer', customerRoutes);
 
-// Mount Customer Category & Product routes
+// Mount Customer Category, Product, & Collection routes
 router.use('/categories', categoryRoutes);
 router.use('/products', productRoutes);
+router.use('/collections', collectionRoutes);
+
+// Mount Public Storefront Settings routes
+router.use('/settings', settingsRoutes);
 
 // Mount Cart routes (supports both /cart and /carts)
 router.use('/cart', cartRoutes);

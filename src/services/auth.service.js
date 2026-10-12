@@ -14,7 +14,7 @@ export class AuthService {
   /**
    * Register a new user (Customer or Admin)
    */
-  static async register({ name, email, password, phone, role = ROLES.CUSTOMER }) {
+  static async register({ name, email, password, phone }) {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user already exists
@@ -34,14 +34,14 @@ export class AuthService {
     // Hash the password securely
     const passwordHash = await hashPassword(password);
 
-    // Create user in database
+    // Create customer in database (strictly enforced to CUSTOMER role)
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
         email: normalizedEmail,
         passwordHash,
         phone: phone ? phone.trim() : null,
-        role: role || ROLES.CUSTOMER,
+        role: ROLES.CUSTOMER,
       },
       select: {
         id: true,

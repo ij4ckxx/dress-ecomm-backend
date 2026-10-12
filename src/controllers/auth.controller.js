@@ -103,4 +103,44 @@ export class AuthController {
       next(error);
     }
   }
+
+  /**
+   * Refresh access token using HttpOnly cookie or request body refreshToken
+   */
+  static async refreshToken(req, res, next) {
+    try {
+      const refreshToken =
+        req.cookies?.[AUTH_CONSTANTS.REFRESH_TOKEN_COOKIE_NAME] ||
+        req.body?.refreshToken;
+
+      const userAgent = req.headers['user-agent'] || null;
+      const ipAddress = req.ip || req.connection?.remoteAddress || null;
+
+      const { accessToken, refreshToken: newRefreshToken, user } =
+        await AuthService.refresh({
+          refreshToken,
+          userAgent,
+          ipAddress,
+        });
+
+      // Set new rotated refresh token in secure HttpOnly cookie
+      res.cookie(AUTH_CONSTANTS.REFRESH_TOKEN_COOKIE_NAME, newRefreshToken, {
+        httpOnly: true,
+        secure: ENV.NODE_ENV === 'production',
+        sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: AUTH_CONSTANTS.COOKIE_MAX_AGE_MS,
+      });
+
+      return sendSuccess(res, {
+        statusCode: HTTP_STATUS.OK,
+        message: 'Token refreshed successfully',
+        data: {
+          user,
+          accessToken,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

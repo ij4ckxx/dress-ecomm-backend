@@ -22,10 +22,6 @@ export const registerSchema = z.object({
     .string()
     .trim()
     .optional(),
-  role: z
-    .nativeEnum(ROLES)
-    .optional()
-    .default(ROLES.CUSTOMER),
 });
 
 export const loginSchema = z.object({
@@ -37,4 +33,8 @@ export const loginSchema = z.object({
   password: z
     .string({ required_error: 'Password is required' })
     .min(1, { message: 'Password is required' }),
+});
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().trim().optional(),
 });
