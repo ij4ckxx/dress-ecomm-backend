@@ -11,6 +11,7 @@ import checkoutRoutes from './client/checkout.routes.js';
 import paymentRoutes from './client/payment.routes.js';
 import clientOrderRoutes from './client/order.routes.js';
 import wishlistRoutes from './client/wishlist.routes.js';
+import contactRoutes from './client/contact.routes.js';
 import adminRoutes from './admin/index.js';
 
 const router = Router();
@@ -26,8 +27,9 @@ router.use('/categories', categoryRoutes);
 router.use('/products', productRoutes);
 router.use('/collections', collectionRoutes);
 
-// Mount Public Storefront Settings routes
+// Mount Public Storefront Settings & Contact routes
 router.use('/settings', settingsRoutes);
+router.use('/contact', contactRoutes);
 
 // Mount Coupon routes
 router.use('/coupons', couponRoutes);

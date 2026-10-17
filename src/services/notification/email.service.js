@@ -261,3 +261,115 @@ export const sendCustomerOrderCancellationEmail = async ({ order, reason = '' })
   });
 };
 
+/**
+ * Sends password reset link email with 1-hour expiry
+ * @param {object} params
+ * @param {string} params.to
+ * @param {string} params.name
+ * @param {string} params.resetUrl
+ */
+export const sendPasswordResetEmail = async ({ to, name, resetUrl }) => {
+  const subject = `Reset Your Password — Maison De Élégance`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5e5; border-radius: 8px;">
+      <h2 style="color: #1a1a1a; margin-top: 0;">Password Reset Request</h2>
+      <p style="color: #444; font-size: 15px;">Dear ${name || 'Customer'},</p>
+      <p style="color: #444; font-size: 15px; line-height: 1.5;">
+        We received a request to reset the password for your Maison De Élégance account. Click the button below to create a new password:
+      </p>
+      <div style="margin: 28px 0; text-align: center;">
+        <a href="${resetUrl}" style="background-color: #1a1a1a; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block; font-size: 15px;">
+          Reset My Password
+        </a>
+      </div>
+      <p style="color: #666; font-size: 13px; line-height: 1.4;">
+        This password reset link will expire in <strong>1 hour</strong>. If you did not make this request, you can safely ignore this email; your account remains secure.
+      </p>
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+      <p style="color: #999; font-size: 12px;">If the button above does not work, copy and paste this URL into your browser:<br/><a href="${resetUrl}" style="color: #666;">${resetUrl}</a></p>
+    </div>
+  `;
+
+  const text = `Dear ${name || 'Customer'},\n\nWe received a request to reset your password. Use the link below to set a new password:\n${resetUrl}\n\nThis link is valid for 1 hour. If you did not request this, please ignore this email.`;
+
+  await sendMailSafe({ to, subject, html, text });
+};
+
+/**
+ * Sends notification confirming successful password reset
+ * @param {object} params
+ * @param {string} params.to
+ * @param {string} params.name
+ */
+export const sendPasswordResetSuccessEmail = async ({ to, name }) => {
+  const subject = `Password Changed Successfully — Maison De Élégance`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5e5; border-radius: 8px;">
+      <h2 style="color: #2e7d32; margin-top: 0;">Password Updated</h2>
+      <p style="color: #444; font-size: 15px;">Dear ${name || 'Customer'},</p>
+      <p style="color: #444; font-size: 15px; line-height: 1.5;">
+        Your password has been successfully reset. You can now log into your account using your new credentials.
+      </p>
+      <p style="color: #888; font-size: 13px; margin-top: 24px;">
+        If you did not perform this action, please contact our concierge immediately at <a href="mailto:${ENV.SUPPORT_EMAIL}">${ENV.SUPPORT_EMAIL}</a>.
+      </p>
+    </div>
+  `;
+
+  const text = `Dear ${name || 'Customer'},\n\nYour Maison De Élégance password has been successfully reset. If you did not perform this action, contact us immediately at ${ENV.SUPPORT_EMAIL}.`;
+
+  await sendMailSafe({ to, subject, html, text });
+};
+
+/**
+ * Sends contact inquiry alerts to store support and customer acknowledgment
+ * @param {object} params
+ * @param {object} params.inquiry
+ */
+export const sendContactInquiryEmails = async ({ inquiry }) => {
+  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || ENV.SUPPORT_EMAIL;
+
+  // 1. Notify store support
+  await sendMailSafe({
+    to: adminEmail,
+    subject: `📩 [Customer Inquiry] ${inquiry.subject}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e5; border-radius: 8px;">
+        <h3 style="color: #1a1a1a; margin-top: 0;">New Storefront Inquiry</h3>
+        <div style="background: #f7f9fa; padding: 14px; border-radius: 6px; margin: 15px 0;">
+          <p style="margin: 4px 0;"><strong>Name:</strong> ${inquiry.name}</p>
+          <p style="margin: 4px 0;"><strong>Email:</strong> <a href="mailto:${inquiry.email}">${inquiry.email}</a></p>
+          <p style="margin: 4px 0;"><strong>Phone:</strong> ${inquiry.phone || 'Not provided'}</p>
+          <p style="margin: 4px 0;"><strong>Subject:</strong> ${inquiry.subject}</p>
+        </div>
+        <p style="font-size: 15px; color: #333; background: #fff; border-left: 3px solid #1a1a1a; padding: 10px 14px; margin: 15px 0;">
+          ${inquiry.message}
+        </p>
+      </div>
+    `,
+    text: `New Inquiry from ${inquiry.name} (${inquiry.email}):\nSubject: ${inquiry.subject}\n\n${inquiry.message}`,
+  });
+
+  // 2. Acknowledge customer
+  await sendMailSafe({
+    to: inquiry.email,
+    subject: `We Received Your Message — Maison De Élégance`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5e5; border-radius: 8px;">
+        <h2 style="color: #1a1a1a; margin-top: 0;">Thank You for Contacting Us</h2>
+        <p style="color: #444; font-size: 15px;">Dear ${inquiry.name},</p>
+        <p style="color: #444; font-size: 15px; line-height: 1.5;">
+          Thank you for reaching out to Maison De Élégance. We have received your inquiry regarding <strong>"${inquiry.subject}"</strong>.
+        </p>
+        <p style="color: #444; font-size: 15px;">Our concierge team will review your message and respond within 24 business hours.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="color: #888; font-size: 13px;">If you have immediate questions, you can reply directly to this email.</p>
+      </div>
+    `,
+    text: `Dear ${inquiry.name},\n\nThank you for contacting Maison De Élégance. We received your inquiry regarding "${inquiry.subject}" and will respond within 24 business hours.`,
+  });
+};
+
+

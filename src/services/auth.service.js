@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import prisma from '../config/db.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
 import {
@@ -9,6 +10,11 @@ import { AppError } from '../middlewares/errorHandler.js';
 import { HTTP_STATUS } from '../constants/httpStatusCodes.js';
 import { ROLES } from '../constants/roles.js';
 import { AUTH_CONSTANTS } from '../constants/auth.constants.js';
+import { ENV } from '../config/env.js';
+import {
+  sendPasswordResetEmail,
+  sendPasswordResetSuccessEmail,
+} from './notification/email.service.js';
 
 export class AuthService {
   /**
@@ -229,3 +235,129 @@ export class AuthService {
     };
   }
 }
+
+/**
+ * Initiates the forgot password flow by generating a secure token and sending email
+ * @param {object} params
+ * @param {string} params.email
+ * @returns {Promise<{ success: boolean, message: string }>}
+ */
+export const requestPasswordReset = async ({ email }) => {
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true, name: true, email: true, isActive: true },
+  });
+
+  // Always return identical success message to prevent user enumeration
+  if (!user || !user.isActive) {
+    return {
+      success: true,
+      message: 'If an account exists with that email, a password reset link has been dispatched.',
+    };
+  }
+
+  // Generate 32-byte secure random token
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour validity
+
+  // Remove any pre-existing tokens for this email
+  await prisma.passwordResetToken.deleteMany({
+    where: { email: normalizedEmail },
+  });
+
+  // Store new token record
+  await prisma.passwordResetToken.create({
+    data: {
+      email: normalizedEmail,
+      tokenHash,
+      expiresAt,
+    },
+  });
+
+  // Construct reset link URL
+  const resetUrl = `${ENV.CLIENT_URL}/reset-password?token=${rawToken}&email=${encodeURIComponent(normalizedEmail)}`;
+
+  // Asynchronously dispatch the email
+  sendPasswordResetEmail({
+    to: user.email,
+    name: user.name,
+    resetUrl,
+  }).catch((err) => console.error('[PASSWORD RESET EMAIL ERROR]:', err));
+
+  return {
+    success: true,
+    message: 'If an account exists with that email, a password reset link has been dispatched.',
+  };
+};
+
+/**
+ * Resets password using the one-time token
+ * @param {object} params
+ * @param {string} params.email
+ * @param {string} params.token
+ * @param {string} params.newPassword
+ * @returns {Promise<{ success: boolean, message: string }>}
+ */
+export const resetPasswordWithToken = async ({ email, token, newPassword }) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const tokenHash = hashToken(token.trim());
+
+  // 1. Locate valid token
+  const resetRecord = await prisma.passwordResetToken.findFirst({
+    where: {
+      email: normalizedEmail,
+      tokenHash,
+      expiresAt: { gt: new Date() },
+    },
+  });
+
+  if (!resetRecord) {
+    throw new AppError(
+      'Invalid or expired password reset link. Please request a new one.',
+      HTTP_STATUS.BAD_REQUEST,
+      'INVALID_OR_EXPIRED_RESET_TOKEN'
+    );
+  }
+
+  // 2. Fetch user
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true, name: true, email: true },
+  });
+
+  if (!user) {
+    throw new AppError('User not found', HTTP_STATUS.NOT_FOUND, 'USER_NOT_FOUND');
+  }
+
+  // 3. Hash new password
+  const newPasswordHash = await hashPassword(newPassword);
+
+  // 4. Update password and invalidate token & active sessions atomically
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newPasswordHash },
+    }),
+    prisma.passwordResetToken.deleteMany({
+      where: { email: normalizedEmail },
+    }),
+    prisma.refreshToken.deleteMany({
+      where: { userId: user.id },
+    }),
+  ]);
+
+  // 5. Send confirmation email
+  sendPasswordResetSuccessEmail({
+    to: user.email,
+    name: user.name,
+  }).catch((err) => console.error('[PASSWORD RESET SUCCESS EMAIL ERROR]:', err));
+
+  return {
+    success: true,
+    message: 'Password has been successfully reset. Please log in with your new credentials.',
+  };
+};
+

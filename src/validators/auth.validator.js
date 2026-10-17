@@ -38,3 +38,30 @@ export const loginSchema = z.object({
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().trim().optional(),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string({ required_error: 'Email is required' })
+    .trim()
+    .toLowerCase()
+    .email({ message: 'Please provide a valid email address' }),
+});
+
+export const resetPasswordSchema = z.object({
+  email: z
+    .string({ required_error: 'Email is required' })
+    .trim()
+    .toLowerCase()
+    .email({ message: 'Please provide a valid email address' }),
+  token: z
+    .string({ required_error: 'Reset token is required' })
+    .trim()
+    .min(10, { message: 'A valid reset token is required' }),
+  newPassword: z
+    .string({ required_error: 'New password is required' })
+    .min(8, { message: 'Password must be at least 8 characters long' })
+    .max(100, { message: 'Password cannot exceed 100 characters' })
+    .regex(/[A-Za-z]/, { message: 'Password must contain at least one letter' })
+    .regex(/[0-9]/, { message: 'Password must contain at least one number' }),
+});
+

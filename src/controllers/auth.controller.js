@@ -1,4 +1,8 @@
-import { AuthService } from '../services/auth.service.js';
+import {
+  AuthService,
+  requestPasswordReset,
+  resetPasswordWithToken,
+} from '../services/auth.service.js';
 import { sendSuccess } from '../utils/apiResponse.js';
 import { HTTP_STATUS } from '../constants/httpStatusCodes.js';
 import { AUTH_CONSTANTS } from '../constants/auth.constants.js';
@@ -144,3 +148,40 @@ export class AuthController {
     }
   }
 }
+
+/**
+ * Controller to initiate forgot password email flow
+ * POST /api/v1/auth/forgot-password
+ */
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const result = await requestPasswordReset({ email });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: result.message,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller to reset password using one-time token
+ * POST /api/v1/auth/reset-password
+ */
+export const resetPassword = async (req, res, next) => {
+  try {
+    const { email, token, newPassword } = req.body;
+    const result = await resetPasswordWithToken({ email, token, newPassword });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: result.message,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
