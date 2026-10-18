@@ -87,7 +87,8 @@ const getAncestors = async (category) => {
 /**
  * Retrieves admin categories in tree, flat, or root-only view
  */
-export const getCategoriesService = async ({ query }) => {
+export const getCategoriesService = async (params = {}) => {
+  const query = params.query || params;
   const { view = 'tree', search, isActive, isFeatured, parentId, page = 1, limit = 50 } = query;
 
   const where = {};
