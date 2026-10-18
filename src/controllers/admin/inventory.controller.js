@@ -4,6 +4,7 @@ import {
   getInventoryTransactionsService,
   getInventoryAlertsService,
   updateStockThresholdService,
+  getInventoryByIdService,
 } from '../../services/admin/inventory.service.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
@@ -103,6 +104,24 @@ export const updateStockThreshold = async (req, res, next) => {
       statusCode: HTTP_STATUS.OK,
       message: 'Stock threshold updated successfully',
       data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get single inventory record details with recent audit transactions
+ * GET /api/v1/admin/inventory/:id
+ */
+export const getInventoryById = async (req, res, next) => {
+  try {
+    const item = await getInventoryByIdService(req.params.id);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Inventory item details fetched successfully',
+      data: item,
     });
   } catch (error) {
     next(error);

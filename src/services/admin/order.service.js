@@ -199,9 +199,6 @@ export const getOrderByIdService = async (orderId) => {
           },
         },
       },
-      metafields: {
-        orderBy: [{ namespace: 'asc' }, { key: 'asc' }],
-      },
     },
   });
 
@@ -706,5 +703,103 @@ export const deleteOrderMetafieldService = async ({ orderId, metafieldId }) => {
   });
 
   return { success: true, message: 'Order metafield deleted successfully' };
+};
+
+/**
+ * Deletes an order permanently (e.g. for cancelled/test orders)
+ * Restores warehouse stock if the order had not reached terminal cancelled/delivered state.
+ */
+export const deleteOrderService = async ({ orderId, adminUser }) => {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+
+  if (!order) {
+    throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // 1. If order was active (not DELIVERED and not CANCELLED), restore stock before deletion
+    if (order.status !== 'CANCELLED' && order.status !== 'DELIVERED') {
+      for (const item of order.items) {
+        if (item.variantId) {
+          const variant = await tx.productVariant.findUnique({
+            where: { id: item.variantId },
+            select: { stockQuantity: true, productId: true },
+          });
+
+          if (variant) {
+            const newVarStock = variant.stockQuantity + item.quantity;
+            await tx.productVariant.update({
+              where: { id: item.variantId },
+              data: { stockQuantity: newVarStock },
+            });
+
+            const allVariants = await tx.productVariant.findMany({
+              where: { productId: variant.productId },
+              select: { stockQuantity: true },
+            });
+            const productStock = allVariants.reduce((s, v) => s + v.stockQuantity, 0);
+            await tx.product.update({
+              where: { id: variant.productId },
+              data: { stockQuantity: productStock },
+            });
+
+            await tx.inventoryTransaction.create({
+              data: {
+                variantId: item.variantId,
+                productId: variant.productId,
+                type: 'RETURN',
+                quantityChange: item.quantity,
+                previousStock: variant.stockQuantity,
+                newStock: newVarStock,
+                reason: `Order #${order.orderNumber} deleted by admin (${adminUser.name || adminUser.role})`,
+                referenceId: order.orderNumber,
+                createdById: adminUser.id,
+              },
+            });
+          }
+        } else if (item.productId) {
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { stockQuantity: true },
+          });
+
+          if (product) {
+            const newProdStock = product.stockQuantity + item.quantity;
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stockQuantity: newProdStock },
+            });
+
+            await tx.inventoryTransaction.create({
+              data: {
+                productId: item.productId,
+                type: 'RETURN',
+                quantityChange: item.quantity,
+                previousStock: product.stockQuantity,
+                newStock: newProdStock,
+                reason: `Order #${order.orderNumber} deleted by admin (${adminUser.name || adminUser.role})`,
+                referenceId: order.orderNumber,
+                createdById: adminUser.id,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    // 2. Delete the order (cascading deletes items, payments, orderStatusHistory, couponUsages)
+    await tx.order.delete({
+      where: { id: orderId },
+    });
+  }, { maxWait: 10000, timeout: 30000 });
+
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+  };
 };
 

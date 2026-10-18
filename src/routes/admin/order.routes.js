@@ -11,6 +11,7 @@ import {
   getOrderMetafields,
   upsertOrderMetafield,
   deleteOrderMetafield,
+  deleteOrder,
 } from '../../controllers/admin/order.controller.js';
 import { authenticate, requireAdmin, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
@@ -179,6 +180,19 @@ router.delete(
   requirePermission(PERMISSIONS.ORDERS_WRITE),
   validateParams(metafieldParamSchema),
   deleteOrderMetafield
+);
+
+/**
+ * @route   DELETE /api/v1/admin/orders/:id
+ * @desc    Permanently delete an order and restore inventory if active
+ * @access  Private (Admin with orders:cancel)
+ */
+router.delete(
+  '/:id',
+  adminLimiter,
+  requirePermission(PERMISSIONS.ORDERS_CANCEL),
+  validateParams(orderParamIdSchema),
+  deleteOrder
 );
 
 export default router;

@@ -93,7 +93,7 @@ export const createUserService = async ({ creator, userData }) => {
       email,
       passwordHash,
       phone: phone || null,
-      avatarUrl: createData.avatarUrl || null,
+      avatarUrl: userData.avatarUrl || null,
       role,
       permissions: assignedPermissions,
       createdById: creator.id,
@@ -364,3 +364,72 @@ export const getAvailablePermissionsService = (currentUser) => {
 };
 
 export const getDelegatablePermissionsService = getAvailablePermissionsService;
+
+/**
+ * Deletes a subordinate user with hierarchy enforcement
+ */
+export const deleteUserService = async ({ currentUser, targetUserId }) => {
+  if (currentUser.id === targetUserId) {
+    throw createServiceError(
+      'You cannot delete your own administrative account.',
+      HTTP_STATUS.BAD_REQUEST,
+      'CANNOT_DELETE_SELF'
+    );
+  }
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { id: true, name: true, email: true, role: true },
+  });
+
+  if (!targetUser) {
+    throw createServiceError('User not found', HTTP_STATUS.NOT_FOUND, 'USER_NOT_FOUND');
+  }
+
+  const targetLevel = ROLE_HIERARCHY[targetUser.role] || 0;
+  const currentLevel = ROLE_HIERARCHY[currentUser.role] || 0;
+
+  // Cannot delete an account with equal or higher rank unless SUPER_ADMIN deleting non-super-admin
+  if (targetLevel >= currentLevel && currentUser.role !== ROLES.SUPER_ADMIN) {
+    throw createServiceError(
+      'Access denied. You cannot delete a user with an equal or higher rank.',
+      HTTP_STATUS.FORBIDDEN,
+      'FORBIDDEN_USER_DELETE'
+    );
+  }
+
+  // If target is a SUPER_ADMIN, ensure there is at least one other active SUPER_ADMIN
+  if (targetUser.role === ROLES.SUPER_ADMIN) {
+    const superAdminCount = await prisma.user.count({
+      where: { role: ROLES.SUPER_ADMIN, isActive: true },
+    });
+    if (superAdminCount <= 1) {
+      throw createServiceError(
+        'Cannot delete the primary/last active Super Admin account.',
+        HTTP_STATUS.BAD_REQUEST,
+        'CANNOT_DELETE_LAST_SUPER_ADMIN'
+      );
+    }
+  }
+
+  // Execute deletion in transaction, clearing hierarchy links first
+  await prisma.$transaction(async (tx) => {
+    // Unlink any subordinate users created by this user
+    await tx.user.updateMany({
+      where: { createdById: targetUserId },
+      data: { createdById: null },
+    });
+
+    // Delete user (cascades accounts, tokens, addresses, cart, wishlist, coupon usages)
+    await tx.user.delete({
+      where: { id: targetUserId },
+    });
+  });
+
+  return {
+    id: targetUser.id,
+    name: targetUser.name,
+    email: targetUser.email,
+    role: targetUser.role,
+  };
+};

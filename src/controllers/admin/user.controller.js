@@ -5,6 +5,7 @@ import {
   updateUserService,
   toggleUserStatusService,
   getDelegatablePermissionsService,
+  deleteUserService,
 } from '../../services/admin/user.service.js';
 import { uploadImageToCloudinary } from '../../utils/cloudinary.js';
 import { sendSuccess, sendError } from '../../utils/apiResponse.js';
@@ -183,6 +184,27 @@ export const getAvailablePermissions = async (req, res, next) => {
       statusCode: HTTP_STATUS.OK,
       message: 'Delegatable permissions retrieved',
       data: { permissions },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a subordinate user
+ * DELETE /api/v1/admin/users/:id
+ */
+export const deleteUser = async (req, res, next) => {
+  try {
+    const deletedUser = await deleteUserService({
+      currentUser: req.user,
+      targetUserId: req.params.id,
+    });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: `User '${deletedUser.name}' (${deletedUser.role}) deleted successfully`,
+      data: { user: deletedUser },
     });
   } catch (error) {
     next(error);

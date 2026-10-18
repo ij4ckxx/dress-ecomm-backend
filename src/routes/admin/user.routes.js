@@ -6,6 +6,7 @@ import {
   updateUser,
   toggleUserStatus,
   getAvailablePermissions,
+  deleteUser,
 } from '../../controllers/admin/user.controller.js';
 import { authenticate, requireAdmin } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery } from '../../middlewares/validate.js';
@@ -86,6 +87,17 @@ router.patch(
   '/:id/status',
   adminLimiter,
   toggleUserStatus
+);
+
+/**
+ * @route   DELETE /api/v1/admin/users/:id
+ * @desc    Delete a subordinate account with hierarchy protection
+ * @access  Private (Admin)
+ */
+router.delete(
+  '/:id',
+  adminLimiter,
+  deleteUser
 );
 
 export default router;

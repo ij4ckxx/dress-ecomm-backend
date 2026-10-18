@@ -10,6 +10,7 @@ import {
   getOrderMetafieldsService,
   upsertOrderMetafieldService,
   deleteOrderMetafieldService,
+  deleteOrderService,
 } from '../../services/admin/order.service.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
@@ -238,6 +239,27 @@ export const deleteOrderMetafield = async (req, res, next) => {
       statusCode: HTTP_STATUS.OK,
       message: result.message,
       data: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Permanently delete an order and restore stock if active
+ * DELETE /api/v1/admin/orders/:id
+ */
+export const deleteOrder = async (req, res, next) => {
+  try {
+    const deleted = await deleteOrderService({
+      orderId: req.params.id,
+      adminUser: req.user,
+    });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: `Order #${deleted.orderNumber} deleted successfully`,
+      data: deleted,
     });
   } catch (error) {
     next(error);

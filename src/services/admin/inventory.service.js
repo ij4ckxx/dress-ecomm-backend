@@ -450,3 +450,147 @@ export const updateStockThresholdService = async ({ variantId, productId, lowSto
     return { itemType: 'PRODUCT', ...updated };
   }
 };
+
+/**
+ * Retrieves a single inventory item (by Variant ID or Product ID) with recent audit history
+ */
+export const getInventoryByIdService = async (id) => {
+  // Check if it is a variant
+  const variant = await prisma.productVariant.findUnique({
+    where: { id },
+    include: {
+      product: {
+        select: {
+          id: true,
+          name: true,
+          brand: true,
+          sku: true,
+          categoryId: true,
+          category: { select: { id: true, name: true, slug: true } },
+          images: { select: { id: true, url: true, isThumbnail: true } },
+        },
+      },
+      attributes: {
+        include: {
+          attributeValue: {
+            include: { attribute: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (variant) {
+    let size = null;
+    let color = null;
+
+    for (const attr of variant.attributes) {
+      const attrName = attr.attributeValue.attribute.name.toLowerCase();
+      if (attrName === 'size') size = attr.attributeValue.value;
+      if (attrName === 'color') color = attr.attributeValue.value;
+    }
+
+    const threshold = variant.lowStockThreshold || 5;
+    let itemStatus = 'IN_STOCK';
+    if (variant.stockQuantity === 0) {
+      itemStatus = 'OUT_OF_STOCK';
+    } else if (variant.stockQuantity <= threshold) {
+      itemStatus = 'LOW_STOCK';
+    }
+
+    // Fetch recent 10 transactions for this variant
+    const recentTransactions = await prisma.inventoryTransaction.findMany({
+      where: { variantId: id },
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true, role: true } },
+      },
+    });
+
+    return {
+      itemType: 'VARIANT',
+      id: variant.id,
+      variantId: variant.id,
+      productId: variant.product.id,
+      productName: variant.product.name,
+      brand: variant.product.brand,
+      sku: variant.sku,
+      variantName: variant.name,
+      size,
+      color,
+      stockQuantity: variant.stockQuantity,
+      lowStockThreshold: threshold,
+      status: itemStatus,
+      regularPrice: variant.regularPrice,
+      salePrice: variant.salePrice,
+      costPrice: variant.costPrice,
+      isActive: variant.isActive,
+      category: variant.product.category,
+      images: variant.product.images,
+      thumbnail: variant.product.images.find((img) => img.isThumbnail)?.url || variant.product.images[0]?.url || null,
+      updatedAt: variant.updatedAt,
+      recentTransactions,
+    };
+  }
+
+  // Check if it is a standalone product
+  const product = await prisma.product.findUnique({
+    where: { id },
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      images: { select: { id: true, url: true, isThumbnail: true } },
+      variants: {
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          stockQuantity: true,
+          lowStockThreshold: true,
+          regularPrice: true,
+          salePrice: true,
+          isActive: true,
+        },
+      },
+    },
+  });
+
+  if (product) {
+    const threshold = product.lowStockThreshold || 5;
+    let itemStatus = 'IN_STOCK';
+    if (product.stockQuantity === 0) {
+      itemStatus = 'OUT_OF_STOCK';
+    } else if (product.stockQuantity <= threshold) {
+      itemStatus = 'LOW_STOCK';
+    }
+
+    const recentTransactions = await prisma.inventoryTransaction.findMany({
+      where: { productId: id },
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true, role: true } },
+      },
+    });
+
+    return {
+      itemType: 'PRODUCT',
+      id: product.id,
+      productId: product.id,
+      productName: product.name,
+      brand: product.brand,
+      sku: product.sku,
+      stockQuantity: product.stockQuantity,
+      lowStockThreshold: threshold,
+      status: itemStatus,
+      category: product.category,
+      images: product.images,
+      thumbnail: product.images.find((img) => img.isThumbnail)?.url || product.images[0]?.url || null,
+      variants: product.variants,
+      updatedAt: product.updatedAt,
+      recentTransactions,
+    };
+  }
+
+  throw createServiceError('Inventory record not found for the given ID', HTTP_STATUS.NOT_FOUND, 'INVENTORY_NOT_FOUND');
+};

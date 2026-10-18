@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import userRoutes from './user.routes.js';
+import customerRoutes from './customer.routes.js';
 import categoryRoutes from './category.routes.js';
 import collectionRoutes from './collection.routes.js';
 import productRoutes from './product.routes.js';
@@ -15,6 +16,7 @@ const router = Router();
 
 // Mount Module 1: Admin User Hierarchy & Staff Management
 router.use('/users', userRoutes);
+router.use('/customers', customerRoutes);
 
 // Mount Module 2: Category & Curated Collection Engine
 router.use('/categories', categoryRoutes);

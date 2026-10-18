@@ -5,6 +5,7 @@ import {
   getInventoryTransactions,
   getInventoryAlerts,
   updateStockThreshold,
+  getInventoryById,
 } from '../../controllers/admin/inventory.controller.js';
 import { authenticate, requireAdmin, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery } from '../../middlewares/validate.js';
@@ -84,6 +85,18 @@ router.patch(
   requirePermission(PERMISSIONS.INVENTORY_WRITE),
   validate(updateStockThresholdSchema),
   updateStockThreshold
+);
+
+/**
+ * @route   GET /api/v1/admin/inventory/:id
+ * @desc    Get detailed inventory stock & recent audit transactions for a variant or product
+ * @access  Private (Admin with inventory:read)
+ */
+router.get(
+  '/:id',
+  adminLimiter,
+  requirePermission(PERMISSIONS.INVENTORY_READ),
+  getInventoryById
 );
 
 export default router;
