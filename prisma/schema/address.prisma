@@ -17,4 +17,5 @@ model Address {
   updatedAt   DateTime @updatedAt
 
   @@index([userId])
+  @@index([userId, isDefault])
 }

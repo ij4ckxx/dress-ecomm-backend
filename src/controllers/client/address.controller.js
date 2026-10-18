@@ -5,6 +5,7 @@ import {
   getAddressesService,
   getAddressByIdService,
   updateAddressService,
+  setDefaultAddressService,
   deleteAddressService,
 } from '../../services/client/address.service.js';
 
@@ -100,6 +101,25 @@ export const deleteAddress = async (req, res, next) => {
     return sendSuccess(res, {
       statusCode: HTTP_STATUS.OK,
       message: result.message,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Sets an existing address as the default address
+ * PATCH /api/v1/customer/addresses/:addressId/default
+ * PUT /api/v1/customer/addresses/:addressId/default
+ */
+export const setDefaultAddress = async (req, res, next) => {
+  try {
+    const address = await setDefaultAddressService(req.user.id, req.params.addressId);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Default address updated successfully',
+      data: { address },
     });
   } catch (error) {
     next(error);

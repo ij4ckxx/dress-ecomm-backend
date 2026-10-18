@@ -37,7 +37,13 @@ export const createAddressService = async (userId, addressData) => {
       where: { userId },
     });
 
-    const shouldBeDefault = isDefault || existingCount === 0;
+    // Check if user currently has ANY default address
+    const hasDefault = await tx.address.findFirst({
+      where: { userId, isDefault: true },
+      select: { id: true },
+    });
+
+    const shouldBeDefault = isDefault || existingCount === 0 || !hasDefault;
 
     // If marked as default, unset default flag on all existing addresses
     if (shouldBeDefault && existingCount > 0) {
@@ -108,6 +114,49 @@ export const getAddressByIdService = async (userId, addressId) => {
 };
 
 /**
+ * Sets an existing address as the default address for the authenticated customer
+ * @param {string} userId - Authenticated customer UUID
+ * @param {string} addressId - Target address UUID
+ * @returns {Promise<object>} Updated address marked as default
+ */
+export const setDefaultAddressService = async (userId, addressId) => {
+  const existingAddress = await prisma.address.findFirst({
+    where: {
+      id: addressId,
+      userId,
+    },
+  });
+
+  if (!existingAddress) {
+    throw new AppError(
+      'Address not found',
+      HTTP_STATUS.NOT_FOUND,
+      'ADDRESS_NOT_FOUND'
+    );
+  }
+
+  if (existingAddress.isDefault) {
+    return existingAddress;
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    // Unset default on all other addresses of this customer
+    await tx.address.updateMany({
+      where: { userId, id: { not: addressId } },
+      data: { isDefault: false },
+    });
+
+    // Set target address as default
+    const updatedAddress = await tx.address.update({
+      where: { id: addressId },
+      data: { isDefault: true },
+    });
+
+    return updatedAddress;
+  }, { maxWait: 10000, timeout: 30000 });
+};
+
+/**
  * Updates an existing address owned by the authenticated customer
  * @param {string} userId - Authenticated customer UUID
  * @param {string} addressId - Target address UUID
@@ -169,15 +218,31 @@ export const updateAddressService = async (userId, addressId, updateData) => {
   }
 
   return await prisma.$transaction(async (tx) => {
-    // If setting as default, unset default on other addresses of this user
+    // If setting as default, unset default on all other addresses of this user
     if (updateData.isDefault === true) {
       await tx.address.updateMany({
         where: { userId, id: { not: addressId } },
         data: { isDefault: false },
       });
       dataToUpdate.isDefault = true;
-    } else if (updateData.isDefault === false) {
-      dataToUpdate.isDefault = false;
+    } else if (updateData.isDefault === false && existingAddress.isDefault) {
+      // User is attempting to unset default on the current default address
+      const otherAddress = await tx.address.findFirst({
+        where: { userId, id: { not: addressId } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (otherAddress) {
+        // Promote the next most recent address to default
+        await tx.address.update({
+          where: { id: otherAddress.id },
+          data: { isDefault: true },
+        });
+        dataToUpdate.isDefault = false;
+      } else {
+        // If this is the only address, it must remain default
+        dataToUpdate.isDefault = true;
+      }
     }
 
     const updatedAddress = await tx.address.update({
@@ -229,6 +294,25 @@ export const deleteAddressService = async (userId, addressId) => {
           data: { isDefault: true },
         });
       }
+    } else {
+      // Ensure that if other addresses remain, one is guaranteed to be default
+      const hasDefault = await tx.address.findFirst({
+        where: { userId, isDefault: true },
+      });
+
+      if (!hasDefault) {
+        const remainingAddress = await tx.address.findFirst({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (remainingAddress) {
+          await tx.address.update({
+            where: { id: remainingAddress.id },
+            data: { isDefault: true },
+          });
+        }
+      }
     }
   }, { maxWait: 10000, timeout: 30000 });
 
@@ -236,3 +320,4 @@ export const deleteAddressService = async (userId, addressId) => {
     message: 'Address deleted successfully',
   };
 };
+

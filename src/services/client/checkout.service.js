@@ -74,8 +74,31 @@ export const resolveAddressSnapshot = async ({ userId, addressId = null, inlineA
     };
   }
 
+  // Fallback to customer's saved default address if available
+  if (userId) {
+    const defaultAddress = await prisma.address.findFirst({
+      where: { userId, isDefault: true },
+    });
+
+    if (defaultAddress) {
+      return {
+        firstName: defaultAddress.firstName,
+        lastName: defaultAddress.lastName,
+        company: defaultAddress.company || null,
+        address1: defaultAddress.address1,
+        address2: defaultAddress.address2 || null,
+        city: defaultAddress.city,
+        state: defaultAddress.state,
+        postalCode: defaultAddress.postalCode,
+        country: defaultAddress.country,
+        phoneNumber: defaultAddress.phoneNumber || null,
+      };
+    }
+  }
+
   throw new AppError('Address details are required', HTTP_STATUS.BAD_REQUEST, 'ADDRESS_REQUIRED');
 };
+
 
 /**
  * Evaluates authoritative cart pricing, taxes, shipping, and coupon discounts

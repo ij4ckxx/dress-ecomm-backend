@@ -11,6 +11,7 @@ import {
   getAddresses,
   getAddressById,
   updateAddress,
+  setDefaultAddress,
   deleteAddress,
 } from '../../controllers/client/address.controller.js';
 
@@ -56,6 +57,22 @@ router.put(
   validateParams(addressIdParamSchema),
   validate(updateAddressSchema),
   updateAddress
+);
+
+/**
+ * @route   PATCH /api/v1/customer/addresses/:addressId/default (or /api/customer/addresses/:addressId/default)
+ * @desc    Set an existing address as the default address
+ * @access  Private (Authenticated Customer)
+ */
+router.patch(
+  '/:addressId/default',
+  validateParams(addressIdParamSchema),
+  setDefaultAddress
+);
+router.put(
+  '/:addressId/default',
+  validateParams(addressIdParamSchema),
+  setDefaultAddress
 );
 
 /**
