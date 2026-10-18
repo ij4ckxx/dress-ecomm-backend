@@ -17,6 +17,7 @@ export const ENV = {
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'fallback_refresh_secret_dress_ecomm_2026',
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || process.env.JWT_EXPIRES_IN || '7d',
+  TOKEN_CLEANUP_CRON: process.env.TOKEN_CLEANUP_CRON || ' 0 */6 * * *', // Runs every hour by default
 
   // Cookies
   COOKIE_SECRET: process.env.COOKIE_SECRET || 'fallback_cookie_secret_dress_ecomm',

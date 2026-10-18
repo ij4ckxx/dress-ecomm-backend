@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import { ENV } from './config/env.js';
 import apiRoutes from './routes/index.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+import { startTokenCleanupCron, stopTokenCleanupCron } from './jobs/tokenCleanup.job.js';
 
 const app = express();
 const PORT = ENV.PORT;
@@ -45,8 +46,28 @@ app.use('/api', apiRoutes);
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
+  startTokenCleanupCron();
+});
+
+// Graceful shutdown listeners
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received. Closing HTTP server and stopping cron jobs...');
+  stopTokenCleanupCron();
+  server.close(() => {
+    console.log('HTTP server closed.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received. Closing HTTP server and stopping cron jobs...');
+  stopTokenCleanupCron();
+  server.close(() => {
+    console.log('HTTP server closed.');
+    process.exit(0);
+  });
 });
 
 export default app;
