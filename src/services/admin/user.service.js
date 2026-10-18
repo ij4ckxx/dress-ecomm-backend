@@ -362,3 +362,5 @@ export const toggleUserStatusService = async ({ currentUser, targetUserId, isAct
 export const getAvailablePermissionsService = (currentUser) => {
   return resolveEffectivePermissions(currentUser);
 };
+
+export const getDelegatablePermissionsService = getAvailablePermissionsService;

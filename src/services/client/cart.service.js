@@ -41,6 +41,64 @@ export const generateConfigHash = ({ productId, variantId = null, modifierOption
 };
 
 /**
+ * Normalizes metafields JSON column to an array
+ * @param {any} metafields
+ * @returns {Array}
+ */
+export const normalizeMetafields = (metafields) => {
+  if (!metafields) return [];
+  if (Array.isArray(metafields)) return metafields;
+  if (typeof metafields === 'string') {
+    try {
+      const parsed = JSON.parse(metafields);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+/**
+ * Upserts a metafield into an array by (namespace, key)
+ * @param {Array} list
+ * @param {object} param1
+ * @returns {{ updatedList: Array, metafield: object }}
+ */
+export const upsertMetafieldInArray = (list, { namespace, key, value, valueType = 'STRING', description = null, isPublic = true }) => {
+  const current = [...normalizeMetafields(list)];
+  const now = new Date().toISOString();
+  const index = current.findIndex((m) => m.namespace === namespace && m.key === key);
+
+  if (index >= 0) {
+    const updated = {
+      ...current[index],
+      value,
+      valueType,
+      updatedAt: now,
+    };
+    if (description !== undefined) updated.description = description;
+    if (isPublic !== undefined) updated.isPublic = isPublic;
+    current[index] = updated;
+    return { updatedList: current, metafield: updated };
+  }
+
+  const newMetafield = {
+    id: crypto.randomUUID(),
+    namespace,
+    key,
+    value,
+    valueType,
+    ...(description !== undefined && { description }),
+    ...(isPublic !== undefined && { isPublic }),
+    createdAt: now,
+    updatedAt: now,
+  };
+  current.push(newMetafield);
+  return { updatedList: current, metafield: newMetafield };
+};
+
+/**
  * Resolves or creates an active Cart based on customer or guest identity
  * Enforces ownership rules:
  * - Customer cannot access another customer's cart
@@ -363,28 +421,6 @@ export const getFormattedCartById = async (cartId) => {
               },
             },
           },
-          metafields: {
-            select: {
-              id: true,
-              namespace: true,
-              key: true,
-              value: true,
-              valueType: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
-        },
-      },
-      metafields: {
-        select: {
-          id: true,
-          namespace: true,
-          key: true,
-          value: true,
-          valueType: true,
-          createdAt: true,
-          updatedAt: true,
         },
       },
     },
@@ -473,7 +509,7 @@ export const getFormattedCartById = async (cartId) => {
         status: availabilityStatus,
         availableQuantity: Math.max(0, availableStock),
       },
-      metafields: item.metafields,
+      metafields: normalizeMetafields(item.metafields),
     };
   });
 
@@ -494,7 +530,7 @@ export const getFormattedCartById = async (cartId) => {
     tax: null,
     total,
     items: formattedItems,
-    metafields: cart.metafields,
+    metafields: normalizeMetafields(cart.metafields),
     createdAt: cart.createdAt,
     updatedAt: cart.updatedAt,
   };
@@ -628,6 +664,18 @@ export const addItemToCart = async (context, input) => {
         },
       });
     } else {
+      const formattedMetafields = (metafields && metafields.length > 0)
+        ? metafields.map((mf) => ({
+            id: crypto.randomUUID(),
+            namespace: mf.namespace,
+            key: mf.key,
+            value: mf.value,
+            valueType: mf.valueType || METAFIELD_VALUE_TYPE.STRING,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }))
+        : [];
+
       const createdItem = await tx.cartItem.create({
         data: {
           cartId: cart.id,
@@ -641,6 +689,7 @@ export const addItemToCart = async (context, input) => {
           modifierTotal: config.modifierTotal,
           lineTotal: config.lineTotal,
           configHash,
+          metafields: formattedMetafields,
         },
       });
 
@@ -651,19 +700,6 @@ export const addItemToCart = async (context, input) => {
             cartItemId: createdItem.id,
             modifierOptionId: mod.modifierOptionId,
             priceDelta: mod.priceDelta,
-          })),
-        });
-      }
-
-      // Insert item metafields if provided
-      if (metafields && metafields.length > 0) {
-        await tx.cartItemMetafield.createMany({
-          data: metafields.map((mf) => ({
-            cartItemId: createdItem.id,
-            namespace: mf.namespace,
-            key: mf.key,
-            value: mf.value,
-            valueType: mf.valueType || METAFIELD_VALUE_TYPE.STRING,
           })),
         });
       }
@@ -887,10 +923,8 @@ export const mergeGuestCart = async (userId, guestToken) => {
       items: {
         include: {
           modifiers: true,
-          metafields: true,
         },
       },
-      metafields: true,
     },
   });
 
@@ -986,6 +1020,7 @@ export const mergeGuestCart = async (userId, guestToken) => {
             modifierTotal: config.modifierTotal,
             lineTotal: newLineTotal,
             configHash: gItem.configHash,
+            metafields: normalizeMetafields(gItem.metafields),
           },
         });
 
@@ -999,46 +1034,32 @@ export const mergeGuestCart = async (userId, guestToken) => {
             })),
           });
         }
-
-        // Copy item metafields
-        if (gItem.metafields.length > 0) {
-          await tx.cartItemMetafield.createMany({
-            data: gItem.metafields.map((mf) => ({
-              cartItemId: newCustItem.id,
-              namespace: mf.namespace,
-              key: mf.key,
-              value: mf.value,
-              valueType: mf.valueType,
-            })),
-          });
-        }
       }
     }
 
     // Merge cart-level metafields (if customer cart doesn't have the same namespace+key)
-    for (const gMeta of guestCart.metafields) {
-      const existing = await tx.cartMetafield.findUnique({
-        where: {
-          cartId_namespace_key: {
-            cartId: customerCart.id,
-            namespace: gMeta.namespace,
-            key: gMeta.key,
-          },
-        },
-      });
+    const guestMetafields = normalizeMetafields(guestCart.metafields);
+    const custMetafields = normalizeMetafields(customerCart.metafields);
 
-      if (!existing) {
-        await tx.cartMetafield.create({
-          data: {
-            cartId: customerCart.id,
-            namespace: gMeta.namespace,
-            key: gMeta.key,
-            value: gMeta.value,
-            valueType: gMeta.valueType,
-          },
+    for (const gMeta of guestMetafields) {
+      const exists = custMetafields.some((m) => m.namespace === gMeta.namespace && m.key === gMeta.key);
+      if (!exists) {
+        custMetafields.push({
+          id: crypto.randomUUID(),
+          namespace: gMeta.namespace,
+          key: gMeta.key,
+          value: gMeta.value,
+          valueType: gMeta.valueType,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         });
       }
     }
+
+    await tx.cart.update({
+      where: { id: customerCart.id },
+      data: { metafields: custMetafields },
+    });
 
     // Deactivate guest cart so it is no longer an active independent cart
     await tx.cart.update({
@@ -1051,7 +1072,7 @@ export const mergeGuestCart = async (userId, guestToken) => {
 };
 
 // ----------------------------------------------------
-// CART METAFIELDS CRUD
+// CART METAFIELDS CRUD (JSON EMBEDDED)
 // ----------------------------------------------------
 
 export const getCartMetafields = async (context) => {
@@ -1060,34 +1081,23 @@ export const getCartMetafields = async (context) => {
     throw new AppError('Cart not found', HTTP_STATUS.NOT_FOUND, 'CART_NOT_FOUND');
   }
 
-  return prisma.cartMetafield.findMany({
-    where: { cartId: cart.id },
-    orderBy: { createdAt: 'asc' },
-  });
+  const list = normalizeMetafields(cart.metafields);
+  return list.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 };
 
 export const upsertCartMetafield = async (context, { namespace, key, value, valueType = 'STRING' }) => {
   const { cart } = await resolveCart({ ...context, autoCreate: true });
 
-  const metafield = await prisma.cartMetafield.upsert({
-    where: {
-      cartId_namespace_key: {
-        cartId: cart.id,
-        namespace,
-        key,
-      },
-    },
-    create: {
-      cartId: cart.id,
-      namespace,
-      key,
-      value,
-      valueType,
-    },
-    update: {
-      value,
-      valueType,
-    },
+  const { updatedList, metafield } = upsertMetafieldInArray(cart.metafields, {
+    namespace,
+    key,
+    value,
+    valueType,
+  });
+
+  await prisma.cart.update({
+    where: { id: cart.id },
+    data: { metafields: updatedList },
   });
 
   return metafield;
@@ -1099,21 +1109,28 @@ export const updateCartMetafield = async (context, metafieldId, { value, valueTy
     throw new AppError('Cart not found', HTTP_STATUS.NOT_FOUND, 'CART_NOT_FOUND');
   }
 
-  const existing = await prisma.cartMetafield.findFirst({
-    where: { id: metafieldId, cartId: cart.id },
-  });
+  const list = normalizeMetafields(cart.metafields);
+  const index = list.findIndex((m) => m.id === metafieldId);
 
-  if (!existing) {
+  if (index === -1) {
     throw new AppError('Cart metafield not found', HTTP_STATUS.NOT_FOUND, 'METAFIELD_NOT_FOUND');
   }
 
-  return prisma.cartMetafield.update({
-    where: { id: metafieldId },
-    data: {
-      value: value !== undefined ? value : existing.value,
-      valueType: valueType || existing.valueType,
-    },
+  const existing = list[index];
+  const updated = {
+    ...existing,
+    value: value !== undefined ? value : existing.value,
+    valueType: valueType || existing.valueType,
+    updatedAt: new Date().toISOString(),
+  };
+  list[index] = updated;
+
+  await prisma.cart.update({
+    where: { id: cart.id },
+    data: { metafields: list },
   });
+
+  return updated;
 };
 
 export const deleteCartMetafield = async (context, metafieldId) => {
@@ -1122,23 +1139,25 @@ export const deleteCartMetafield = async (context, metafieldId) => {
     throw new AppError('Cart not found', HTTP_STATUS.NOT_FOUND, 'CART_NOT_FOUND');
   }
 
-  const existing = await prisma.cartMetafield.findFirst({
-    where: { id: metafieldId, cartId: cart.id },
-  });
+  const list = normalizeMetafields(cart.metafields);
+  const index = list.findIndex((m) => m.id === metafieldId);
 
-  if (!existing) {
+  if (index === -1) {
     throw new AppError('Cart metafield not found', HTTP_STATUS.NOT_FOUND, 'METAFIELD_NOT_FOUND');
   }
 
-  await prisma.cartMetafield.delete({
-    where: { id: metafieldId },
+  list.splice(index, 1);
+
+  await prisma.cart.update({
+    where: { id: cart.id },
+    data: { metafields: list },
   });
 
   return { success: true, message: 'Cart metafield deleted successfully' };
 };
 
 // ----------------------------------------------------
-// CART ITEM METAFIELDS CRUD
+// CART ITEM METAFIELDS CRUD (JSON EMBEDDED)
 // ----------------------------------------------------
 
 export const getCartItemMetafields = async (context, itemId) => {
@@ -1155,10 +1174,8 @@ export const getCartItemMetafields = async (context, itemId) => {
     throw new AppError('Cart item not found', HTTP_STATUS.NOT_FOUND, 'CART_ITEM_NOT_FOUND');
   }
 
-  return prisma.cartItemMetafield.findMany({
-    where: { cartItemId: itemId },
-    orderBy: { createdAt: 'asc' },
-  });
+  const list = normalizeMetafields(item.metafields);
+  return list.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 };
 
 export const upsertCartItemMetafield = async (context, itemId, { namespace, key, value, valueType = 'STRING' }) => {
@@ -1175,26 +1192,19 @@ export const upsertCartItemMetafield = async (context, itemId, { namespace, key,
     throw new AppError('Cart item not found', HTTP_STATUS.NOT_FOUND, 'CART_ITEM_NOT_FOUND');
   }
 
-  return prisma.cartItemMetafield.upsert({
-    where: {
-      cartItemId_namespace_key: {
-        cartItemId: itemId,
-        namespace,
-        key,
-      },
-    },
-    create: {
-      cartItemId: itemId,
-      namespace,
-      key,
-      value,
-      valueType,
-    },
-    update: {
-      value,
-      valueType,
-    },
+  const { updatedList, metafield } = upsertMetafieldInArray(item.metafields, {
+    namespace,
+    key,
+    value,
+    valueType,
   });
+
+  await prisma.cartItem.update({
+    where: { id: itemId },
+    data: { metafields: updatedList },
+  });
+
+  return metafield;
 };
 
 export const updateCartItemMetafield = async (context, itemId, metafieldId, { value, valueType }) => {
@@ -1211,21 +1221,28 @@ export const updateCartItemMetafield = async (context, itemId, metafieldId, { va
     throw new AppError('Cart item not found', HTTP_STATUS.NOT_FOUND, 'CART_ITEM_NOT_FOUND');
   }
 
-  const existing = await prisma.cartItemMetafield.findFirst({
-    where: { id: metafieldId, cartItemId: itemId },
-  });
+  const list = normalizeMetafields(item.metafields);
+  const index = list.findIndex((m) => m.id === metafieldId);
 
-  if (!existing) {
+  if (index === -1) {
     throw new AppError('Cart item metafield not found', HTTP_STATUS.NOT_FOUND, 'METAFIELD_NOT_FOUND');
   }
 
-  return prisma.cartItemMetafield.update({
-    where: { id: metafieldId },
-    data: {
-      value: value !== undefined ? value : existing.value,
-      valueType: valueType || existing.valueType,
-    },
+  const existing = list[index];
+  const updated = {
+    ...existing,
+    value: value !== undefined ? value : existing.value,
+    valueType: valueType || existing.valueType,
+    updatedAt: new Date().toISOString(),
+  };
+  list[index] = updated;
+
+  await prisma.cartItem.update({
+    where: { id: itemId },
+    data: { metafields: list },
   });
+
+  return updated;
 };
 
 export const deleteCartItemMetafield = async (context, itemId, metafieldId) => {
@@ -1242,16 +1259,18 @@ export const deleteCartItemMetafield = async (context, itemId, metafieldId) => {
     throw new AppError('Cart item not found', HTTP_STATUS.NOT_FOUND, 'CART_ITEM_NOT_FOUND');
   }
 
-  const existing = await prisma.cartItemMetafield.findFirst({
-    where: { id: metafieldId, cartItemId: itemId },
-  });
+  const list = normalizeMetafields(item.metafields);
+  const index = list.findIndex((m) => m.id === metafieldId);
 
-  if (!existing) {
+  if (index === -1) {
     throw new AppError('Cart item metafield not found', HTTP_STATUS.NOT_FOUND, 'METAFIELD_NOT_FOUND');
   }
 
-  await prisma.cartItemMetafield.delete({
-    where: { id: metafieldId },
+  list.splice(index, 1);
+
+  await prisma.cartItem.update({
+    where: { id: itemId },
+    data: { metafields: list },
   });
 
   return { success: true, message: 'Cart item metafield deleted successfully' };

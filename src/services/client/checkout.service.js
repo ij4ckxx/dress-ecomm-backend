@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import prisma from '../../config/db.js';
 import { AppError } from '../../middlewares/errorHandler.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
@@ -341,7 +342,6 @@ export const placeOrder = async ({ userId, payload }) => {
     const cart = await tx.cart.findFirst({
       where: { customerId: userId, status: 'ACTIVE' },
       include: {
-        metafields: true,
         items: {
           include: {
             product: { include: { images: { where: { isThumbnail: true }, take: 1 } } },
@@ -449,7 +449,23 @@ export const placeOrder = async ({ userId, payload }) => {
       );
     }
 
-    // D. Create Order Record
+    // D. Prepare Order Metafields from Cart Metafields
+    const cartMetafields = Array.isArray(cart.metafields) ? cart.metafields : [];
+    const orderMetafields = cartMetafields
+      .filter((m) => !['price', 'paymentstatus', 'status', 'total'].includes((m.key || '').toLowerCase()))
+      .map((m) => ({
+        id: crypto.randomUUID(),
+        namespace: m.namespace,
+        key: m.key,
+        value: m.value,
+        valueType: m.valueType || 'STRING',
+        description: null,
+        isPublic: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+
+    // E. Create Order Record with Embedded Metafields
     const order = await tx.order.create({
       data: {
         orderNumber,
@@ -468,6 +484,7 @@ export const placeOrder = async ({ userId, payload }) => {
         shippingAddress: shippingSnapshot,
         billingAddress: billingSnapshot,
         notes: customerNotes,
+        metafields: orderMetafields,
         items: {
           create: calculation.items.map((item) => ({
             productId: item.productId,
@@ -488,26 +505,6 @@ export const placeOrder = async ({ userId, payload }) => {
       },
     });
 
-    // E. Copy Cart Metafields to Order Metafields
-    if (cart.metafields && cart.metafields.length > 0) {
-      const allowedMetafields = cart.metafields.filter(
-        (m) => !['price', 'paymentstatus', 'status', 'total'].includes(m.key.toLowerCase())
-      );
-      if (allowedMetafields.length > 0) {
-        await tx.orderMetafield.createMany({
-          data: allowedMetafields.map((m) => ({
-            orderId: order.id,
-            namespace: m.namespace,
-            key: m.key,
-            value: m.value,
-            valueType: m.valueType,
-            description: null,
-            isPublic: true,
-          })),
-          skipDuplicates: true,
-        });
-      }
-    }
 
     // F. Record Coupon Usage (if applied)
     if (calculation.appliedCoupon) {
@@ -676,16 +673,22 @@ export const getOrderConfirmationByNumber = async ({ userId, orderNumber }) => {
       payments: {
         select: { gateway: true, status: true, transactionId: true, amount: true },
       },
-      metafields: {
-        where: { isPublic: true },
-        select: { namespace: true, key: true, value: true, valueType: true, description: true },
-      },
     },
   });
 
   if (!order) {
     throw new AppError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
   }
+
+  const publicMetafields = (Array.isArray(order.metafields) ? order.metafields : [])
+    .filter((m) => m.isPublic !== false)
+    .map((m) => ({
+      namespace: m.namespace,
+      key: m.key,
+      value: m.value,
+      valueType: m.valueType,
+      description: m.description || null,
+    }));
 
   return {
     id: order.id,
@@ -711,7 +714,7 @@ export const getOrderConfirmationByNumber = async ({ userId, orderNumber }) => {
       currency: 'INR',
     },
     payments: order.payments,
-    metafields: order.metafields,
+    metafields: publicMetafields,
     createdAt: order.createdAt,
   };
 };

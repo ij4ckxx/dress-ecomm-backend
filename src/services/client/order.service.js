@@ -135,18 +135,6 @@ export const getCustomerOrderByNumberService = async ({ userId, orderNumber }) =
         },
         orderBy: { createdAt: 'asc' },
       },
-      metafields: {
-        where: { isPublic: true },
-        select: {
-          id: true,
-          namespace: true,
-          key: true,
-          value: true,
-          valueType: true,
-          description: true,
-        },
-        orderBy: [{ namespace: 'asc' }, { key: 'asc' }],
-      },
     },
   });
 
@@ -201,7 +189,17 @@ export const getCustomerOrderByNumberService = async ({ userId, orderNumber }) =
       amount: toNumber(p.amount),
     })),
     statusHistory: order.statusHistory,
-    metafields: order.metafields,
+    metafields: (Array.isArray(order.metafields) ? order.metafields : [])
+      .filter((m) => m.isPublic !== false)
+      .map((m) => ({
+        id: m.id,
+        namespace: m.namespace,
+        key: m.key,
+        value: m.value,
+        valueType: m.valueType,
+        description: m.description || null,
+      }))
+      .sort((a, b) => (a.namespace || '').localeCompare(b.namespace || '') || (a.key || '').localeCompare(b.key || '')),
   };
 };
 

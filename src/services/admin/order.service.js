@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import prisma from '../../config/db.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { Parser } from 'json2csv';
@@ -613,19 +614,15 @@ export const updateOrderPaymentStatusService = async ({ orderId, adminUser, paym
 export const getOrderMetafieldsService = async (orderId) => {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { id: true },
+    select: { id: true, metafields: true },
   });
 
   if (!order) {
     throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
   }
 
-  const metafields = await prisma.orderMetafield.findMany({
-    where: { orderId },
-    orderBy: [{ namespace: 'asc' }, { key: 'asc' }],
-  });
-
-  return metafields;
+  const list = Array.isArray(order.metafields) ? order.metafields : [];
+  return list.sort((a, b) => (a.namespace || '').localeCompare(b.namespace || '') || (a.key || '').localeCompare(b.key || ''));
 };
 
 /**
@@ -636,36 +633,46 @@ export const upsertOrderMetafieldService = async ({ orderId, metafieldData }) =>
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { id: true },
+    select: { id: true, metafields: true },
   });
 
   if (!order) {
     throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
   }
 
-  const metafield = await prisma.orderMetafield.upsert({
-    where: {
-      orderId_namespace_key: {
-        orderId,
-        namespace,
-        key,
-      },
-    },
-    create: {
-      orderId,
+  const list = Array.isArray(order.metafields) ? [...order.metafields] : [];
+  const index = list.findIndex((m) => m.namespace === namespace && m.key === key);
+  const now = new Date().toISOString();
+
+  let metafield;
+  if (index >= 0) {
+    metafield = {
+      ...list[index],
+      value,
+      valueType,
+      description,
+      isPublic,
+      updatedAt: now,
+    };
+    list[index] = metafield;
+  } else {
+    metafield = {
+      id: crypto.randomUUID(),
       namespace,
       key,
       value,
       valueType,
       description,
       isPublic,
-    },
-    update: {
-      value,
-      valueType,
-      description,
-      isPublic,
-    },
+      createdAt: now,
+      updatedAt: now,
+    };
+    list.push(metafield);
+  }
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { metafields: list },
   });
 
   return metafield;
@@ -675,16 +682,27 @@ export const upsertOrderMetafieldService = async ({ orderId, metafieldData }) =>
  * Deletes an order metafield by ID
  */
 export const deleteOrderMetafieldService = async ({ orderId, metafieldId }) => {
-  const metafield = await prisma.orderMetafield.findFirst({
-    where: { id: metafieldId, orderId },
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, metafields: true },
   });
 
-  if (!metafield) {
+  if (!order) {
+    throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
+  }
+
+  const list = Array.isArray(order.metafields) ? [...order.metafields] : [];
+  const index = list.findIndex((m) => m.id === metafieldId);
+
+  if (index === -1) {
     throw createServiceError('Metafield not found', HTTP_STATUS.NOT_FOUND, 'METAFIELD_NOT_FOUND');
   }
 
-  await prisma.orderMetafield.delete({
-    where: { id: metafieldId },
+  list.splice(index, 1);
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { metafields: list },
   });
 
   return { success: true, message: 'Order metafield deleted successfully' };

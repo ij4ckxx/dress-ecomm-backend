@@ -5,13 +5,6 @@ enum CartStatus {
   EXPIRED
 }
 
-enum MetafieldValueType {
-  STRING
-  NUMBER
-  BOOLEAN
-  JSON
-}
-
 model Cart {
   id         String          @id @default(uuid())
   customerId String?
@@ -23,7 +16,7 @@ model Cart {
   updatedAt  DateTime        @updatedAt
 
   items      CartItem[]
-  metafields CartMetafield[]
+  metafields Json?           @default("[]")
 
   @@index([customerId, status])
   @@index([guestToken])
@@ -56,7 +49,7 @@ model CartItem {
   updatedAt     DateTime             @updatedAt
 
   modifiers     CartItemModifier[]
-  metafields    CartItemMetafield[]
+  metafields    Json?                @default("[]")
 
   @@unique([cartId, configHash])
   @@index([cartId])
@@ -78,34 +71,3 @@ model CartItemModifier {
   @@index([modifierOptionId])
 }
 
-model CartMetafield {
-  id        String             @id @default(uuid())
-  cartId    String
-  cart      Cart               @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  namespace String
-  key       String
-  value     String
-  valueType MetafieldValueType @default(STRING)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-
-  @@unique([cartId, namespace, key])
-  @@index([cartId])
-  @@index([namespace, key])
-}
-
-model CartItemMetafield {
-  id         String             @id @default(uuid())
-  cartItemId String
-  cartItem   CartItem           @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
-  namespace  String
-  key        String
-  value      String
-  valueType  MetafieldValueType @default(STRING)
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
-
-  @@unique([cartItemId, namespace, key])
-  @@index([cartItemId])
-  @@index([namespace, key])
-}
