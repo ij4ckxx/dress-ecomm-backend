@@ -13,30 +13,87 @@ const imageFilter = (req, file, cb) => {
   }
 };
 
-/**
- * Single file upload middleware (held in memory)
- */
-export const uploadSingleImage = multer({
+const baseUpload = multer({
   storage: memoryStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max per image
   fileFilter: imageFilter,
-}).single('image');
+});
 
 /**
- * Multiple files upload middleware (held in memory, max 5 images per request)
+ * Single file upload middleware (accepts field: 'image' or 'file')
  */
-export const uploadMultipleImages = multer({
-  storage: memoryStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: imageFilter,
-}).array('images', 5);
+const singleUploadHandler = baseUpload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'file', maxCount: 1 },
+]);
+
+export const uploadSingleImage = (req, res, next) => {
+  singleUploadHandler(req, res, (err) => {
+    if (err) return next(err);
+    if (req.files) {
+      req.file = req.files.image?.[0] || req.files.file?.[0] || null;
+    }
+    next();
+  });
+};
 
 /**
- * Banner image upload middleware (field: 'backgroundImage' or 'image')
+ * Multiple files upload middleware (accepts fields: 'images' or 'files', max 10 images)
  */
-export const uploadBannerImage = multer({
-  storage: memoryStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: imageFilter,
-}).single('backgroundImage');
+const multipleUploadHandler = baseUpload.fields([
+  { name: 'images', maxCount: 10 },
+  { name: 'files', maxCount: 10 },
+]);
 
+export const uploadMultipleImages = (req, res, next) => {
+  multipleUploadHandler(req, res, (err) => {
+    if (err) return next(err);
+    if (req.files) {
+      req.files = req.files.images || req.files.files || [];
+    } else {
+      req.files = [];
+    }
+    next();
+  });
+};
+
+/**
+ * Banner image upload middleware (accepts fields: 'backgroundImage', 'image', or 'banner')
+ */
+const bannerUploadHandler = baseUpload.fields([
+  { name: 'backgroundImage', maxCount: 1 },
+  { name: 'banner', maxCount: 1 },
+  { name: 'image', maxCount: 1 },
+]);
+
+export const uploadBannerImage = (req, res, next) => {
+  bannerUploadHandler(req, res, (err) => {
+    if (err) return next(err);
+    if (req.files) {
+      req.file =
+        req.files.backgroundImage?.[0] ||
+        req.files.banner?.[0] ||
+        req.files.image?.[0] ||
+        null;
+    }
+    next();
+  });
+};
+
+/**
+ * Avatar image upload middleware (accepts fields: 'avatar' or 'image')
+ */
+const avatarUploadHandler = baseUpload.fields([
+  { name: 'avatar', maxCount: 1 },
+  { name: 'image', maxCount: 1 },
+]);
+
+export const uploadAvatarImage = (req, res, next) => {
+  avatarUploadHandler(req, res, (err) => {
+    if (err) return next(err);
+    if (req.files) {
+      req.file = req.files.avatar?.[0] || req.files.image?.[0] || null;
+    }
+    next();
+  });
+};

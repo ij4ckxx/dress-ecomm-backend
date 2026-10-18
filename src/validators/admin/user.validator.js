@@ -4,6 +4,40 @@ import { PERMISSIONS } from '../../constants/permissions.js';
 
 const allPermissionValues = Object.values(PERMISSIONS);
 
+const optionalAvatarUrl = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().url('Avatar URL must be a valid URL').optional().nullable()
+);
+
+const coerceBoolean = (defaultVal) =>
+  z.preprocess((v) => {
+    if (typeof v === 'string') {
+      if (v.toLowerCase() === 'true') return true;
+      if (v.toLowerCase() === 'false') return false;
+    }
+    return v;
+  }, defaultVal !== undefined ? z.boolean().default(defaultVal) : z.boolean().optional());
+
+const coercePermissions = z.preprocess((v) => {
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return [];
+      }
+    }
+    if (trimmed.length > 0) {
+      return trimmed.split(',').map((p) => p.trim()).filter(Boolean);
+    }
+    return [];
+  }
+  return v;
+}, z.array(z.string().refine((val) => allPermissionValues.includes(val), {
+  message: 'Invalid permission code supplied',
+})));
+
 export const createAdminUserSchema = z.object({
   name: z
     .string({ required_error: 'Name is required' })
@@ -30,23 +64,16 @@ export const createAdminUserSchema = z.object({
     .string()
     .trim()
     .optional(),
-  permissions: z
-    .array(z.string().refine((val) => allPermissionValues.includes(val), {
-      message: 'Invalid permission code supplied',
-    }))
-    .optional()
-    .default([]),
+  avatarUrl: optionalAvatarUrl,
+  permissions: coercePermissions.optional().default([]),
 });
 
 export const updateAdminUserSchema = z.object({
   name: z.string().trim().min(2).max(100).optional(),
   phone: z.string().trim().optional(),
-  permissions: z
-    .array(z.string().refine((val) => allPermissionValues.includes(val), {
-      message: 'Invalid permission code supplied',
-    }))
-    .optional(),
-  isActive: z.boolean().optional(),
+  avatarUrl: optionalAvatarUrl,
+  permissions: coercePermissions.optional(),
+  isActive: coerceBoolean(),
 });
 
 export const queryAdminUsersSchema = z.object({

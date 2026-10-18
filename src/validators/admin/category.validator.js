@@ -1,5 +1,24 @@
 import { z } from 'zod';
 
+const optionalUrl = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().url('Image URL must be a valid URL').optional().nullable()
+);
+
+const optionalUuid = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().uuid('Invalid Parent Category ID').optional().nullable()
+);
+
+const coerceBoolean = (defaultVal) =>
+  z.preprocess((v) => {
+    if (typeof v === 'string') {
+      if (v.toLowerCase() === 'true') return true;
+      if (v.toLowerCase() === 'false') return false;
+    }
+    return v;
+  }, defaultVal !== undefined ? z.boolean().default(defaultVal) : z.boolean().optional());
+
 export const categoryParamIdSchema = z.object({
   id: z.string({ required_error: 'Category ID is required' }).uuid('Invalid Category ID format'),
 });
@@ -18,11 +37,11 @@ export const createAdminCategorySchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be URL-safe (kebab-case)')
     .optional(),
   description: z.string().trim().max(1000).optional().nullable(),
-  imageUrl: z.string().url('Image URL must be a valid URL').optional().nullable(),
-  parentId: z.string().uuid('Invalid Parent Category ID').optional().nullable(),
+  imageUrl: optionalUrl,
+  parentId: optionalUuid,
   sortOrder: z.coerce.number().int().min(0).default(0),
-  isFeatured: z.boolean().default(false),
-  isActive: z.boolean().default(true),
+  isFeatured: coerceBoolean(false),
+  isActive: coerceBoolean(true),
 });
 
 export const updateAdminCategorySchema = z.object({
@@ -35,11 +54,11 @@ export const updateAdminCategorySchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be URL-safe (kebab-case)')
     .optional(),
   description: z.string().trim().max(1000).optional().nullable(),
-  imageUrl: z.string().url('Image URL must be a valid URL').optional().nullable(),
-  parentId: z.string().uuid('Invalid Parent Category ID').optional().nullable(),
+  imageUrl: optionalUrl,
+  parentId: optionalUuid,
   sortOrder: z.coerce.number().int().min(0).optional(),
-  isFeatured: z.boolean().optional(),
-  isActive: z.boolean().optional(),
+  isFeatured: coerceBoolean(),
+  isActive: coerceBoolean(),
 });
 
 export const queryAdminCategorySchema = z.object({

@@ -9,7 +9,7 @@ import {
   deleteCollectionService,
 } from '../../services/admin/collection.service.js';
 import { uploadImageToCloudinary } from '../../utils/cloudinary.js';
-import { sendSuccess } from '../../utils/apiResponse.js';
+import { sendSuccess, sendError } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 
 /**
@@ -50,11 +50,25 @@ export const getCollectionById = async (req, res, next) => {
 };
 
 /**
- * Create a new curated collection
+ * Create a new curated collection (supports direct file upload OR imageUrl, one only)
  * POST /api/v1/admin/collections
  */
 export const createCollection = async (req, res, next) => {
   try {
+    const hasFile = Boolean(req.file);
+    const hasUrl = Boolean(req.body.imageUrl && typeof req.body.imageUrl === 'string' && req.body.imageUrl.trim() !== '');
+
+    if (hasFile && hasUrl) {
+      return sendError(res, {
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        message: 'Conflicting image input: Please provide either an image file upload OR an image URL, not both.',
+        error: {
+          code: 'IMAGE_INPUT_CONFLICT',
+          details: [{ field: 'image', message: 'Cannot accept both an image file upload and imageUrl simultaneously.' }],
+        },
+      });
+    }
+
     let imageUrl = req.body.imageUrl || null;
 
     if (req.file) {
@@ -68,7 +82,7 @@ export const createCollection = async (req, res, next) => {
       try {
         productIds = JSON.parse(productIds);
       } catch {
-        productIds = productIds.split(',').map((id) => id.trim());
+        productIds = productIds.split(',').map((id) => id.trim()).filter(Boolean);
       }
     }
 
@@ -89,11 +103,25 @@ export const createCollection = async (req, res, next) => {
 };
 
 /**
- * Update collection details
+ * Update collection details (supports direct file upload OR imageUrl, one only)
  * PUT /api/v1/admin/collections/:id
  */
 export const updateCollection = async (req, res, next) => {
   try {
+    const hasFile = Boolean(req.file);
+    const hasUrl = Boolean(req.body.imageUrl && typeof req.body.imageUrl === 'string' && req.body.imageUrl.trim() !== '');
+
+    if (hasFile && hasUrl) {
+      return sendError(res, {
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        message: 'Conflicting image input: Please provide either an image file upload OR an image URL, not both.',
+        error: {
+          code: 'IMAGE_INPUT_CONFLICT',
+          details: [{ field: 'image', message: 'Cannot accept both an image file upload and imageUrl simultaneously.' }],
+        },
+      });
+    }
+
     let imageUrl = req.body.imageUrl;
 
     if (req.file) {

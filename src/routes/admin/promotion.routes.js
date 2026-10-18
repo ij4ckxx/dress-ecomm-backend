@@ -11,6 +11,7 @@ import { authenticate, requireAdmin, requirePermission } from '../../middlewares
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
 import { adminLimiter } from '../../middlewares/rateLimiter.js';
 import { uploadBannerImage } from '../../middlewares/upload.middleware.js';
+import { validateImageExclusivity } from '../../middlewares/imageExclusivity.js';
 import { PERMISSIONS } from '../../constants/permissions.js';
 import {
   promotionParamIdSchema,
@@ -53,7 +54,7 @@ router.get(
 
 /**
  * @route   POST /api/v1/admin/promotions
- * @desc    Create a new marketing campaign banner with optional image upload
+ * @desc    Create a new marketing campaign banner (accepts file upload OR backgroundImage URL, one only)
  * @access  Private (Admin with promotions:manage)
  */
 router.post(
@@ -61,13 +62,18 @@ router.post(
   adminLimiter,
   requirePermission(PERMISSIONS.PROMOTIONS_MANAGE),
   uploadBannerImage,
+  validateImageExclusivity({
+    fileFields: ['backgroundImage', 'banner', 'image'],
+    urlField: 'backgroundImage',
+    isMultiple: false,
+  }),
   validate(createPromotionSchema),
   createPromotion
 );
 
 /**
  * @route   PUT /api/v1/admin/promotions/:id
- * @desc    Update an existing marketing campaign banner
+ * @desc    Update an existing marketing campaign banner (accepts file upload OR backgroundImage URL, one only)
  * @access  Private (Admin with promotions:manage)
  */
 router.put(
@@ -76,6 +82,11 @@ router.put(
   requirePermission(PERMISSIONS.PROMOTIONS_MANAGE),
   validateParams(promotionParamIdSchema),
   uploadBannerImage,
+  validateImageExclusivity({
+    fileFields: ['backgroundImage', 'banner', 'image'],
+    urlField: 'backgroundImage',
+    isMultiple: false,
+  }),
   validate(updatePromotionSchema),
   updatePromotion
 );

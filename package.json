@@ -43,6 +43,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "@mermaid-js/mermaid-cli": "^11.17.0",
+    "nodemon": "^3.1.14",
+    "prisma-erd-generator": "^3.2.1"
   }
 }

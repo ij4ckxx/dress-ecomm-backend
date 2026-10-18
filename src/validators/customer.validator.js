@@ -28,6 +28,11 @@ export const ACCOUNT_FIELD_CONFIG = {
   },
 };
 
+const optionalAvatarUrl = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().url('Avatar URL must be a valid URL').optional().nullable()
+);
+
 /**
  * Schema for updating Customer Account Details
  * Supports both `phoneNumber` and `phone` for frontend flexibility.
@@ -72,7 +77,15 @@ export const updateAccountDetailsSchema = z
       .optional()
       .nullable()
       .or(z.literal('')),
+    avatarUrl: optionalAvatarUrl,
   });
+
+/**
+ * Schema for updating Avatar only (e.g. via dedicated POST /customer/account/avatar)
+ */
+export const updateAvatarOnlySchema = z.object({
+  avatarUrl: optionalAvatarUrl,
+});
 
 /**
  * Schema for Changing Customer Password

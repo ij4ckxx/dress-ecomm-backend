@@ -1,5 +1,19 @@
 import { z } from 'zod';
 
+const optionalUrl = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().url('Invalid background image URL').optional().nullable()
+);
+
+const coerceBoolean = (defaultVal) =>
+  z.preprocess((v) => {
+    if (typeof v === 'string') {
+      if (v.toLowerCase() === 'true') return true;
+      if (v.toLowerCase() === 'false') return false;
+    }
+    return v;
+  }, defaultVal !== undefined ? z.boolean().default(defaultVal) : z.boolean().optional());
+
 export const promotionParamIdSchema = z.object({
   id: z.string().uuid('Invalid Promotion Campaign ID format'),
 });
@@ -21,15 +35,18 @@ export const createPromotionSchema = z
       .max(150, 'Title cannot exceed 150 characters'),
     subtitle: z.string().trim().max(300).optional().nullable(),
     badge: z.string().trim().max(50).optional().nullable(),
-    discountPercentage: z.coerce.number().int().min(1).max(100).optional().nullable(),
+    discountPercentage: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.coerce.number().int().min(1).max(100).optional().nullable()
+    ),
     couponCode: z.string().trim().max(30).optional().nullable(),
-    startDate: z.string({ required_error: 'Start date is required' }).datetime(),
-    endDate: z.string({ required_error: 'End date is required' }).datetime(),
-    backgroundImage: z.string().url('Invalid background image URL').optional().nullable(),
+    startDate: z.string({ required_error: 'Start date is required' }),
+    endDate: z.string({ required_error: 'End date is required' }),
+    backgroundImage: optionalUrl,
     ctaText: z.string().trim().max(50).default('SHOP THE SALE'),
     ctaLink: z.string().trim().max(200).default('/products'),
     sortOrder: z.coerce.number().int().default(0),
-    isActive: z.boolean().default(true),
+    isActive: coerceBoolean(true),
   })
   .refine(
     (data) => new Date(data.endDate) > new Date(data.startDate),
@@ -44,15 +61,18 @@ export const updatePromotionSchema = z
     title: z.string().trim().min(3).max(150).optional(),
     subtitle: z.string().trim().max(300).optional().nullable(),
     badge: z.string().trim().max(50).optional().nullable(),
-    discountPercentage: z.coerce.number().int().min(1).max(100).optional().nullable(),
+    discountPercentage: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.coerce.number().int().min(1).max(100).optional().nullable()
+    ),
     couponCode: z.string().trim().max(30).optional().nullable(),
-    startDate: z.string().datetime().optional(),
-    endDate: z.string().datetime().optional(),
-    backgroundImage: z.string().url().optional().nullable(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    backgroundImage: optionalUrl,
     ctaText: z.string().trim().max(50).optional(),
     ctaLink: z.string().trim().max(200).optional(),
     sortOrder: z.coerce.number().int().optional(),
-    isActive: z.boolean().optional(),
+    isActive: coerceBoolean(),
   })
   .refine(
     (data) => {
@@ -68,5 +88,5 @@ export const updatePromotionSchema = z
   );
 
 export const togglePromotionStatusSchema = z.object({
-  isActive: z.boolean({ required_error: 'isActive status is required' }),
+  isActive: coerceBoolean(true),
 });

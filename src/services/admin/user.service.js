@@ -93,6 +93,7 @@ export const createUserService = async ({ creator, userData }) => {
       email,
       passwordHash,
       phone: phone || null,
+      avatarUrl: createData.avatarUrl || null,
       role,
       permissions: assignedPermissions,
       createdById: creator.id,
@@ -103,6 +104,7 @@ export const createUserService = async ({ creator, userData }) => {
       name: true,
       email: true,
       role: true,
+      avatarUrl: true,
       permissions: true,
       phone: true,
       isActive: true,
@@ -264,6 +266,7 @@ export const updateUserService = async ({ currentUser, targetUserId, updateData 
   const dataToUpdate = {};
   if (updateData.name !== undefined) dataToUpdate.name = updateData.name;
   if (updateData.phone !== undefined) dataToUpdate.phone = updateData.phone;
+  if (updateData.avatarUrl !== undefined) dataToUpdate.avatarUrl = updateData.avatarUrl;
   if (updateData.isActive !== undefined) dataToUpdate.isActive = updateData.isActive;
 
   // Permissions update with delegation validation
@@ -294,6 +297,7 @@ export const updateUserService = async ({ currentUser, targetUserId, updateData 
       name: true,
       email: true,
       role: true,
+      avatarUrl: true,
       permissions: true,
       phone: true,
       isActive: true,

@@ -10,6 +10,7 @@ import { authenticate, requireAdmin, requirePermission } from '../../middlewares
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
 import { adminLimiter } from '../../middlewares/rateLimiter.js';
 import { uploadSingleImage } from '../../middlewares/upload.middleware.js';
+import { validateImageExclusivity } from '../../middlewares/imageExclusivity.js';
 import { PERMISSIONS } from '../../constants/permissions.js';
 import {
   createAdminCategorySchema,
@@ -39,7 +40,7 @@ router.get('/:id', adminLimiter, validateParams(categoryParamIdSchema), getCateg
 
 /**
  * @route   POST /api/v1/admin/categories
- * @desc    Create a category (accepts JSON or multipart/form-data image)
+ * @desc    Create a category (accepts direct file upload OR imageUrl, one only)
  * @access  Private (Admin with categories:manage)
  */
 router.post(
@@ -47,13 +48,14 @@ router.post(
   adminLimiter,
   requirePermission(PERMISSIONS.CATEGORIES_MANAGE),
   uploadSingleImage,
+  validateImageExclusivity({ fileFields: ['image', 'file'], urlField: 'imageUrl', isMultiple: false }),
   validate(createAdminCategorySchema),
   createCategory
 );
 
 /**
  * @route   PUT /api/v1/admin/categories/:id
- * @desc    Update a category with circular hierarchy safeguards
+ * @desc    Update a category (accepts direct file upload OR imageUrl, one only)
  * @access  Private (Admin with categories:manage)
  */
 router.put(
@@ -62,6 +64,7 @@ router.put(
   requirePermission(PERMISSIONS.CATEGORIES_MANAGE),
   validateParams(categoryParamIdSchema),
   uploadSingleImage,
+  validateImageExclusivity({ fileFields: ['image', 'file'], urlField: 'imageUrl', isMultiple: false }),
   validate(updateAdminCategorySchema),
   updateCategory
 );

@@ -10,6 +10,8 @@ import {
 import { authenticate, requireAdmin } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery } from '../../middlewares/validate.js';
 import { adminLimiter, adminAuthLimiter } from '../../middlewares/rateLimiter.js';
+import { uploadAvatarImage } from '../../middlewares/upload.middleware.js';
+import { validateImageExclusivity } from '../../middlewares/imageExclusivity.js';
 import {
   createAdminUserSchema,
   updateAdminUserSchema,
@@ -30,12 +32,14 @@ router.get('/permissions/delegatable', adminLimiter, getAvailablePermissions);
 
 /**
  * @route   POST /api/v1/admin/users
- * @desc    Create a down-level user with assigned capabilities
+ * @desc    Create a down-level user (accepts avatar file upload OR avatarUrl, one only)
  * @access  Private (SUPER_ADMIN, STORE_ADMIN, STAFF)
  */
 router.post(
   '/',
   adminAuthLimiter,
+  uploadAvatarImage,
+  validateImageExclusivity({ fileFields: ['avatar', 'image'], urlField: 'avatarUrl', isMultiple: false }),
   validate(createAdminUserSchema),
   createUser
 );
@@ -61,12 +65,14 @@ router.get('/:id', adminLimiter, getUserById);
 
 /**
  * @route   PUT /api/v1/admin/users/:id
- * @desc    Update subordinate user details or permissions
+ * @desc    Update subordinate user details, permissions, or avatar (accepts avatar file upload OR avatarUrl, one only)
  * @access  Private (Admin)
  */
 router.put(
   '/:id',
   adminLimiter,
+  uploadAvatarImage,
+  validateImageExclusivity({ fileFields: ['avatar', 'image'], urlField: 'avatarUrl', isMultiple: false }),
   validate(updateAdminUserSchema),
   updateUser
 );

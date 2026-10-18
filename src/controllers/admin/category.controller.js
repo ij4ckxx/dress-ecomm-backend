@@ -5,27 +5,23 @@ import {
   updateCategoryService,
   deleteCategoryService,
 } from '../../services/admin/category.service.js';
-import { uploadImageToCloudinary } from '../../utils/cloudinary.js';
-import { sendSuccess } from '../../utils/apiResponse.js';
+import { sendSuccess, sendError } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
+import { uploadImageToCloudinary } from '../../utils/cloudinary.js';
 
 /**
- * List categories in tree, flat, or root-only view
+ * Get categories (tree, flat, or root-only)
  * GET /api/v1/admin/categories
  */
 export const getCategories = async (req, res, next) => {
   try {
-    const result = await getCategoriesService({ query: req.query });
+    const result = await getCategoriesService(req.query);
 
     return sendSuccess(res, {
       statusCode: HTTP_STATUS.OK,
       message: 'Categories fetched successfully',
-      data: result.data,
-      pagination: result.pagination,
-      meta: {
-        view: result.view,
-        totalCount: result.totalCount,
-      },
+      data: result.categories ? { categories: result.categories } : result,
+      pagination: result.pagination || null,
     });
   } catch (error) {
     next(error);
@@ -33,7 +29,7 @@ export const getCategories = async (req, res, next) => {
 };
 
 /**
- * Get category detail by ID
+ * Get category by ID with ancestors and children
  * GET /api/v1/admin/categories/:id
  */
 export const getCategoryById = async (req, res, next) => {
@@ -51,11 +47,25 @@ export const getCategoryById = async (req, res, next) => {
 };
 
 /**
- * Create a new category (supports JSON imageUrl or in-memory image upload)
+ * Create a new category (supports direct file upload OR imageUrl, one only)
  * POST /api/v1/admin/categories
  */
 export const createCategory = async (req, res, next) => {
   try {
+    const hasFile = Boolean(req.file);
+    const hasUrl = Boolean(req.body.imageUrl && typeof req.body.imageUrl === 'string' && req.body.imageUrl.trim() !== '');
+
+    if (hasFile && hasUrl) {
+      return sendError(res, {
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        message: 'Conflicting image input: Please provide either an image file upload OR an image URL, not both.',
+        error: {
+          code: 'IMAGE_INPUT_CONFLICT',
+          details: [{ field: 'image', message: 'Cannot accept both an image file upload and imageUrl simultaneously.' }],
+        },
+      });
+    }
+
     let imageUrl = req.body.imageUrl || null;
 
     // If an image file was attached via multipart form, stream to Cloudinary
@@ -80,11 +90,25 @@ export const createCategory = async (req, res, next) => {
 };
 
 /**
- * Update a category (supports JSON or multipart image update)
+ * Update a category (supports direct file upload OR imageUrl, one only)
  * PUT /api/v1/admin/categories/:id
  */
 export const updateCategory = async (req, res, next) => {
   try {
+    const hasFile = Boolean(req.file);
+    const hasUrl = Boolean(req.body.imageUrl && typeof req.body.imageUrl === 'string' && req.body.imageUrl.trim() !== '');
+
+    if (hasFile && hasUrl) {
+      return sendError(res, {
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        message: 'Conflicting image input: Please provide either an image file upload OR an image URL, not both.',
+        error: {
+          code: 'IMAGE_INPUT_CONFLICT',
+          details: [{ field: 'image', message: 'Cannot accept both an image file upload and imageUrl simultaneously.' }],
+        },
+      });
+    }
+
     let imageUrl = req.body.imageUrl;
 
     if (req.file) {
@@ -115,12 +139,11 @@ export const updateCategory = async (req, res, next) => {
  */
 export const deleteCategory = async (req, res, next) => {
   try {
-    const force = req.query.force === 'true';
-    const result = await deleteCategoryService(req.params.id, { force });
+    const result = await deleteCategoryService(req.params.id);
 
     return sendSuccess(res, {
       statusCode: HTTP_STATUS.OK,
-      message: 'Category deleted successfully',
+      message: result.message || 'Category deleted successfully',
       data: result,
     });
   } catch (error) {

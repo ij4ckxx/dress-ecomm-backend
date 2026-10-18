@@ -13,6 +13,7 @@ import { authenticate, requireAdmin, requirePermission } from '../../middlewares
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
 import { adminLimiter } from '../../middlewares/rateLimiter.js';
 import { uploadMultipleImages } from '../../middlewares/upload.middleware.js';
+import { validateImageExclusivity, parseFormDataJsonFields } from '../../middlewares/imageExclusivity.js';
 import { PERMISSIONS } from '../../constants/permissions.js';
 import {
   createAdminProductSchema,
@@ -21,6 +22,7 @@ import {
   queryAdminProductSchema,
   productParamIdSchema,
   productImageParamSchema,
+  uploadProductImageBodySchema,
 } from '../../validators/admin/product.validator.js';
 
 const router = Router();
@@ -56,7 +58,7 @@ router.get(
 
 /**
  * @route   POST /api/v1/admin/products
- * @desc    Create a product with variants and optional images
+ * @desc    Create a product with variants and images (accepts file uploads OR images URL array, one only)
  * @access  Private (Admin with products:write)
  */
 router.post(
@@ -64,13 +66,15 @@ router.post(
   adminLimiter,
   requirePermission(PERMISSIONS.PRODUCTS_WRITE),
   uploadMultipleImages,
+  parseFormDataJsonFields(['variants', 'images']),
+  validateImageExclusivity({ fileFields: ['images', 'files'], urlField: 'images', isMultiple: true }),
   validate(createAdminProductSchema),
   createProduct
 );
 
 /**
  * @route   PUT /api/v1/admin/products/:id
- * @desc    Update an existing product and its variants
+ * @desc    Update an existing product and its variants (accepts file uploads OR images URL array, one only)
  * @access  Private (Admin with products:write)
  */
 router.put(
@@ -79,6 +83,8 @@ router.put(
   requirePermission(PERMISSIONS.PRODUCTS_WRITE),
   validateParams(productParamIdSchema),
   uploadMultipleImages,
+  parseFormDataJsonFields(['variants', 'images']),
+  validateImageExclusivity({ fileFields: ['images', 'files'], urlField: 'images', isMultiple: true }),
   validate(updateAdminProductSchema),
   updateProduct
 );
@@ -112,7 +118,7 @@ router.delete(
 
 /**
  * @route   POST /api/v1/admin/products/:id/images
- * @desc    Upload additional images to product gallery
+ * @desc    Upload additional images to product gallery (accepts file upload(s) OR image URL, one only)
  * @access  Private (Admin with products:write)
  */
 router.post(
@@ -121,6 +127,8 @@ router.post(
   requirePermission(PERMISSIONS.PRODUCTS_WRITE),
   validateParams(productParamIdSchema),
   uploadMultipleImages,
+  validateImageExclusivity({ fileFields: ['images', 'files', 'image', 'file'], urlField: 'url', isMultiple: true }),
+  validate(uploadProductImageBodySchema),
   uploadProductImages
 );
 

@@ -80,9 +80,13 @@ export const getAccountDetailsService = async (userId) => {
  * @param {string} params.email
  * @param {string|null} [params.phoneNumber]
  * @param {string|null} [params.phone]
+ * @param {string|null} [params.avatarUrl]
  * @returns {Promise<object>} Updated customer account details
  */
-export const updateAccountDetailsService = async (userId, { firstName, lastName, email, phoneNumber, phone }) => {
+export const updateAccountDetailsService = async (
+  userId,
+  { firstName, lastName, email, phoneNumber, phone, avatarUrl }
+) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // 1. Fetch current user to verify existence and check for email changes
@@ -120,14 +124,20 @@ export const updateAccountDetailsService = async (userId, { firstName, lastName,
   const rawPhone = phoneNumber !== undefined ? phoneNumber : phone;
   const cleanPhone = rawPhone && String(rawPhone).trim() !== '' ? String(rawPhone).trim() : null;
 
+  const dataToUpdate = {
+    name: fullName,
+    email: normalizedEmail,
+    phone: cleanPhone,
+  };
+
+  if (avatarUrl !== undefined) {
+    dataToUpdate.avatarUrl = avatarUrl;
+  }
+
   // 4. Update customer record
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: {
-      name: fullName,
-      email: normalizedEmail,
-      phone: cleanPhone,
-    },
+    data: dataToUpdate,
     select: {
       id: true,
       name: true,
@@ -156,6 +166,27 @@ export const updateAccountDetailsService = async (userId, { firstName, lastName,
     createdAt: updatedUser.createdAt,
     updatedAt: updatedUser.updatedAt,
   };
+};
+
+/**
+ * Updates avatar only for the customer
+ * @param {string} userId
+ * @param {string|null} avatarUrl
+ */
+export const updateCustomerAvatarService = async (userId, avatarUrl) => {
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { avatarUrl },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      avatarUrl: true,
+      updatedAt: true,
+    },
+  });
+
+  return updatedUser;
 };
 
 /**

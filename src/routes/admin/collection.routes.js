@@ -13,6 +13,7 @@ import { authenticate, requireAdmin, requirePermission } from '../../middlewares
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
 import { adminLimiter } from '../../middlewares/rateLimiter.js';
 import { uploadSingleImage } from '../../middlewares/upload.middleware.js';
+import { validateImageExclusivity } from '../../middlewares/imageExclusivity.js';
 import { PERMISSIONS } from '../../constants/permissions.js';
 import {
   createAdminCollectionSchema,
@@ -43,7 +44,7 @@ router.get('/:id', adminLimiter, validateParams(collectionParamIdSchema), getCol
 
 /**
  * @route   POST /api/v1/admin/collections
- * @desc    Create a curated collection (accepts JSON or multipart/form-data image)
+ * @desc    Create a curated collection (accepts direct file upload OR imageUrl, one only)
  * @access  Private (Admin with collections:manage)
  */
 router.post(
@@ -51,13 +52,14 @@ router.post(
   adminLimiter,
   requirePermission(PERMISSIONS.COLLECTIONS_MANAGE),
   uploadSingleImage,
+  validateImageExclusivity({ fileFields: ['image', 'file'], urlField: 'imageUrl', isMultiple: false }),
   validate(createAdminCollectionSchema),
   createCollection
 );
 
 /**
  * @route   PUT /api/v1/admin/collections/:id
- * @desc    Update collection details
+ * @desc    Update collection details (accepts direct file upload OR imageUrl, one only)
  * @access  Private (Admin with collections:manage)
  */
 router.put(
@@ -66,6 +68,7 @@ router.put(
   requirePermission(PERMISSIONS.COLLECTIONS_MANAGE),
   validateParams(collectionParamIdSchema),
   uploadSingleImage,
+  validateImageExclusivity({ fileFields: ['image', 'file'], urlField: 'imageUrl', isMultiple: false }),
   validate(updateAdminCollectionSchema),
   updateCollection
 );

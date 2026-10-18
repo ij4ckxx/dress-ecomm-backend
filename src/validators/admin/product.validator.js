@@ -9,8 +9,17 @@ export const productImageParamSchema = z.object({
   imageId: z.string().uuid('Invalid Image ID'),
 });
 
+const coerceBoolean = (defaultVal) =>
+  z.preprocess((v) => {
+    if (typeof v === 'string') {
+      if (v.toLowerCase() === 'true') return true;
+      if (v.toLowerCase() === 'false') return false;
+    }
+    return v;
+  }, defaultVal !== undefined ? z.boolean().default(defaultVal) : z.boolean().optional());
+
 const variantInputSchema = z.object({
-  id: z.string().uuid().optional(), // Provided when updating existing variant
+  id: z.string().uuid().optional(),
   sku: z.string().trim().min(2, 'Variant SKU must be at least 2 chars').max(80),
   name: z.string().trim().max(100).optional().nullable(),
   regularPrice: z.coerce.number().min(0).optional().nullable(),
@@ -18,24 +27,64 @@ const variantInputSchema = z.object({
   offerPrice: z.coerce.number().min(0).optional().nullable(),
   costPrice: z.coerce.number().min(0).optional().nullable(),
   stockQuantity: z.coerce.number().int().min(0).default(0),
-  size: z.string().trim().max(50).optional().nullable(), // e.g. "S", "M", "L", "Free Size"
-  color: z.string().trim().max(50).optional().nullable(), // e.g. "Emerald Green"
+  size: z.string().trim().max(50).optional().nullable(),
+  color: z.string().trim().max(50).optional().nullable(),
   colorHex: z
     .string()
     .trim()
     .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Color hex must be a valid hex code (e.g. #046307)')
     .optional()
     .nullable(),
-  isActive: z.boolean().default(true),
+  isActive: coerceBoolean(true),
 });
 
 const imageInputSchema = z.object({
   url: z.string().url('Image URL must be valid'),
   altText: z.string().trim().max(200).optional().nullable(),
-  isThumbnail: z.boolean().default(false),
+  isThumbnail: coerceBoolean(false),
   sortOrder: z.coerce.number().int().min(0).default(0),
   variantSku: z.string().trim().optional().nullable(),
+  variantId: z.string().uuid().optional().nullable(),
 });
+
+const coerceImagesArray = z.preprocess((v) => {
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => (typeof item === 'string' ? { url: item } : item));
+        }
+      } catch {
+        return [];
+      }
+    }
+    if (trimmed.length > 0) {
+      return [{ url: trimmed }];
+    }
+    return [];
+  }
+  if (Array.isArray(v)) {
+    return v.map((item) => (typeof item === 'string' ? { url: item } : item));
+  }
+  return v;
+}, z.array(imageInputSchema).optional().default([]));
+
+const coerceVariantsArray = z.preprocess((v) => {
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+  return v;
+}, z.array(variantInputSchema).optional().default([]));
 
 export const createAdminProductSchema = z.object({
   name: z
@@ -59,10 +108,10 @@ export const createAdminProductSchema = z.object({
   offerPrice: z.coerce.number().min(0).optional().nullable(),
   costPrice: z.coerce.number().min(0).optional().nullable(),
   stockQuantity: z.coerce.number().int().min(0).default(0),
-  isActive: z.boolean().default(true),
-  isFeatured: z.boolean().default(false),
-  images: z.array(imageInputSchema).optional().default([]),
-  variants: z.array(variantInputSchema).optional().default([]),
+  isActive: coerceBoolean(true),
+  isFeatured: coerceBoolean(false),
+  images: coerceImagesArray,
+  variants: coerceVariantsArray,
 });
 
 export const updateAdminProductSchema = z.object({
@@ -83,15 +132,23 @@ export const updateAdminProductSchema = z.object({
   offerPrice: z.coerce.number().min(0).optional().nullable(),
   costPrice: z.coerce.number().min(0).optional().nullable(),
   stockQuantity: z.coerce.number().int().min(0).optional(),
-  isActive: z.boolean().optional(),
-  isFeatured: z.boolean().optional(),
-  images: z.array(imageInputSchema).optional(),
-  variants: z.array(variantInputSchema).optional(),
+  isActive: coerceBoolean(),
+  isFeatured: coerceBoolean(),
+  images: coerceImagesArray,
+  variants: coerceVariantsArray,
+});
+
+export const uploadProductImageBodySchema = z.object({
+  url: z.string().url('Image URL must be a valid URL').optional(),
+  altText: z.string().trim().max(200).optional().nullable(),
+  isThumbnail: coerceBoolean(false),
+  sortOrder: z.coerce.number().int().min(0).default(0),
+  variantId: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().uuid('Invalid variant ID').optional().nullable()),
 });
 
 export const toggleProductStatusSchema = z.object({
-  isActive: z.boolean().optional(),
-  isFeatured: z.boolean().optional(),
+  isActive: coerceBoolean(),
+  isFeatured: coerceBoolean(),
 });
 
 export const queryAdminProductSchema = z.object({
@@ -108,19 +165,5 @@ export const queryAdminProductSchema = z.object({
     .enum(['true', 'false'])
     .transform((val) => val === 'true')
     .optional(),
-  stockStatus: z.enum(['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK']).optional(),
-  minPrice: z.coerce.number().min(0).optional(),
-  maxPrice: z.coerce.number().min(0).optional(),
-  sort: z
-    .enum([
-      'newest',
-      'oldest',
-      'price_asc',
-      'price_desc',
-      'stock_asc',
-      'stock_desc',
-      'name_asc',
-      'bestselling',
-    ])
-    .default('newest'),
+  sortBy: z.enum(['newest', 'oldest', 'price_asc', 'price_desc', 'name_asc', 'rating_desc']).default('newest'),
 });
