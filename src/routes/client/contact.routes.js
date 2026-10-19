@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { submitContactInquiry } from '../../controllers/client/contact.controller.js';
 import { validate } from '../../middlewares/validate.js';
 import { contactInquirySchema } from '../../validators/contact.validator.js';
+import { authLimiter } from '../../middlewares/rateLimiter.js';
 
 const router = Router();
 
@@ -10,6 +11,6 @@ const router = Router();
  * @desc    Submit a customer concierge inquiry or support message
  * @access  Public
  */
-router.post('/', validate(contactInquirySchema), submitContactInquiry);
+router.post('/', authLimiter, validate(contactInquirySchema), submitContactInquiry);
 
 export default router;

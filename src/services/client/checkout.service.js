@@ -116,8 +116,8 @@ export const computeCheckoutPricing = async ({
 }) => {
   const config = storeConfig || (await getStoreSettingsService());
 
-  const freeShippingThreshold = Number(config.freeShippingThreshold) || 2999;
-  const flatShippingRate = Number(config.flatShippingRate) || 150;
+  const freeShippingThreshold = Number(config?.freeShippingThreshold) || Number(process.env.DEFAULT_FREE_SHIPPING_THRESHOLD) || 2999;
+  const flatShippingRate = Number(config?.flatShippingRate ?? process.env.DEFAULT_FLAT_SHIPPING_RATE ?? 150);
   const taxRate = 0.12; // 12% luxury garment GST
 
   let subtotal = 0;
@@ -196,14 +196,13 @@ export const computeCheckoutPricing = async ({
 
   const netTaxableSubtotal = Math.max(0, round(subtotal - discountAmount));
 
-  // Shipping
-  const shippingAmount = netTaxableSubtotal >= freeShippingThreshold || netTaxableSubtotal === 0 ? 0 : flatShippingRate;
+  // Dynamic Shipping: uses flatShippingRate from StoreConfig or ENV (free if exceeding threshold)
+  const isComplimentaryShipping = freeShippingThreshold > 0 && netTaxableSubtotal >= freeShippingThreshold;
+  const shippingAmount = cartItems.length > 0 ? (isComplimentaryShipping ? 0 : flatShippingRate) : 0;
+  const taxAmount = 0;
 
-  // Tax (12% GST)
-  const taxAmount = round(netTaxableSubtotal * taxRate);
-
-  // Final Total
-  const totalAmount = round(netTaxableSubtotal + shippingAmount + taxAmount);
+  // Final Total: subtotal - discount + flat shipping
+  const totalAmount = round(netTaxableSubtotal + shippingAmount);
 
   return {
     items: itemBreakdown,
@@ -317,6 +316,7 @@ export const placeOrder = async ({ userId, payload }) => {
     billingAddressSameAsShipping = true,
     billingAddress,
     paymentMethod,
+    upiReference = null,
     couponCode = null,
     customerNotes = null,
   } = payload;
@@ -353,6 +353,15 @@ export const placeOrder = async ({ userId, payload }) => {
       'A valid contact phone number is required for Cash on Delivery orders',
       HTTP_STATUS.BAD_REQUEST,
       'PHONE_REQUIRED_FOR_COD'
+    );
+  }
+
+  // UPI_QR UTR Reference Validation
+  if (paymentMethod === 'UPI_QR' && (!upiReference || String(upiReference).trim().length < 6)) {
+    throw new AppError(
+      'A valid 12-digit UPI reference / UTR number (at least 6 characters) is required for Direct UPI QR payments',
+      HTTP_STATUS.BAD_REQUEST,
+      'UPI_REFERENCE_REQUIRED'
     );
   }
 
@@ -463,10 +472,11 @@ export const placeOrder = async ({ userId, payload }) => {
       storeConfig,
     });
 
-    // COD Ceiling Check (Max ₹25,000 for COD)
-    if (paymentMethod === 'COD' && calculation.pricing.totalAmount > 25000) {
+    // COD Ceiling Check (Max limit configurable via DB or ENV, default ₹25,000)
+    const codCeiling = Number(storeConfig?.paymentMethodsJson?.codMaxLimit ?? process.env.DEFAULT_COD_MAX_LIMIT ?? 25000);
+    if (paymentMethod === 'COD' && calculation.pricing.totalAmount > codCeiling) {
       throw new AppError(
-        'Cash on Delivery is limited to orders up to ₹25,000. Please select Razorpay for higher value orders.',
+        `Cash on Delivery is limited to orders up to ₹${Number(codCeiling).toLocaleString('en-IN')}. Please select Razorpay or Direct UPI QR for higher value orders.`,
         HTTP_STATUS.BAD_REQUEST,
         'COD_AMOUNT_EXCEEDED'
       );
@@ -489,6 +499,7 @@ export const placeOrder = async ({ userId, payload }) => {
       }));
 
     // E. Create Order Record with Embedded Metafields
+    const initialOrderStatus = paymentMethod === 'UPI_QR' ? 'CONFIRMED' : 'PENDING';
     const order = await tx.order.create({
       data: {
         orderNumber,
@@ -501,9 +512,10 @@ export const placeOrder = async ({ userId, payload }) => {
         shippingAmount: calculation.pricing.shippingAmount,
         taxAmount: calculation.pricing.taxAmount,
         totalAmount: calculation.pricing.totalAmount,
-        status: 'PENDING',
+        status: initialOrderStatus,
         paymentStatus: 'PENDING',
         paymentMethod,
+        upiReference: paymentMethod === 'UPI_QR' ? String(upiReference).trim() : null,
         shippingAddress: shippingSnapshot,
         billingAddress: billingSnapshot,
         notes: customerNotes,
@@ -528,7 +540,6 @@ export const placeOrder = async ({ userId, payload }) => {
       },
     });
 
-
     // F. Record Coupon Usage (if applied)
     if (calculation.appliedCoupon) {
       await tx.couponUsage.create({
@@ -546,16 +557,23 @@ export const placeOrder = async ({ userId, payload }) => {
       });
     }
 
-    // F. Record Initial Status History
+    // G. Record Initial Status History
+    let statusHistoryComment = 'Order placed, awaiting Razorpay payment verification';
+    if (paymentMethod === 'COD') {
+      statusHistoryComment = 'Order placed via Cash on Delivery';
+    } else if (paymentMethod === 'UPI_QR') {
+      statusHistoryComment = `Order placed via Direct UPI QR Payment (UTR: ${String(upiReference).trim()})`;
+    }
+
     await tx.orderStatusHistory.create({
       data: {
         orderId: order.id,
-        newStatus: 'PENDING',
-        comment: paymentMethod === 'COD' ? 'Order placed via Cash on Delivery' : 'Order placed, awaiting Razorpay payment verification',
+        newStatus: initialOrderStatus,
+        comment: statusHistoryComment,
       },
     });
 
-    // G. Create Initial Payment Record
+    // H. Create Initial Payment Record
     await tx.payment.create({
       data: {
         orderId: order.id,
@@ -563,10 +581,11 @@ export const placeOrder = async ({ userId, payload }) => {
         amount: calculation.pricing.totalAmount,
         currency: calculation.pricing.currency,
         status: 'PENDING',
+        transactionId: paymentMethod === 'UPI_QR' ? String(upiReference).trim() : null,
       },
     });
 
-    // H. Clear Customer Cart Items
+    // I. Clear Customer Cart Items
     await tx.cartItem.deleteMany({
       where: { cartId: cart.id },
     });
@@ -596,6 +615,15 @@ export const placeOrder = async ({ userId, payload }) => {
   if (paymentMethod === 'COD') {
     // Asynchronously dispatch notifications
     sendCodAdminAlertEmail({ order: createdOrder }).catch((e) => console.error(e));
+    sendOrderConfirmationEmail({ order: createdOrder }).catch((e) => console.error(e));
+
+    return {
+      order: createdOrder,
+    };
+  }
+
+  if (paymentMethod === 'UPI_QR') {
+    // Asynchronously dispatch order confirmation
     sendOrderConfirmationEmail({ order: createdOrder }).catch((e) => console.error(e));
 
     return {

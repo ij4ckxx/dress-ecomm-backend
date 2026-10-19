@@ -15,14 +15,14 @@ const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code 
  * Retrieves paginated customer list with calculated LTV and order stats
  */
 export const getCustomersService = async ({ query }) => {
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
   const {
-    page = 1,
-    limit = 20,
     search,
     sortBy = 'createdAt',
     sortOrder = 'desc',
     isActive,
-  } = query;
+  } = query || {};
 
   const skip = (page - 1) * limit;
 

@@ -33,4 +33,27 @@ export const ENV = {
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || 'concierge@maisondeelegance.com',
+
+  // Store & E-commerce Defaults (Dynamic override via .env or Database)
+  DEFAULT_FLAT_SHIPPING_RATE: parseFloat(process.env.DEFAULT_FLAT_SHIPPING_RATE || process.env.FLAT_SHIPPING_RATE || '150'),
+  DEFAULT_FREE_SHIPPING_THRESHOLD: parseFloat(process.env.DEFAULT_FREE_SHIPPING_THRESHOLD || process.env.FREE_SHIPPING_THRESHOLD || '2999'),
+  DEFAULT_COD_MAX_LIMIT: parseFloat(process.env.DEFAULT_COD_MAX_LIMIT || process.env.COD_MAX_LIMIT || '25000'),
+  DEFAULT_UPI_ID: process.env.DEFAULT_UPI_ID || process.env.UPI_ID || 'maison@okhdfcbank',
+  DEFAULT_UPI_PAYEE_NAME: process.env.DEFAULT_UPI_PAYEE_NAME || process.env.UPI_PAYEE_NAME || 'Maison De Élégance',
+  DEFAULT_UPI_INSTRUCTIONS: process.env.DEFAULT_UPI_INSTRUCTIONS || "Scan the QR code or tap 'Pay via UPI App', then enter your 12-digit UPI Reference / UTR Number below to confirm.",
+  DEFAULT_CURRENCY: process.env.DEFAULT_CURRENCY || 'INR',
+  DEFAULT_CURRENCY_SYMBOL: process.env.DEFAULT_CURRENCY_SYMBOL || '₹',
 };
+
+// Security check for production environments
+if (ENV.NODE_ENV === 'production') {
+  if (
+    !process.env.JWT_ACCESS_SECRET ||
+    ENV.JWT_ACCESS_SECRET === 'fallback_access_secret_dress_ecomm_2026'
+  ) {
+    console.warn(
+      '⚠️ [SECURITY WARNING] JWT_ACCESS_SECRET is using a default fallback secret in production! Please define a strong, random JWT_ACCESS_SECRET in your .env file.'
+    );
+  }
+}
+

@@ -25,9 +25,10 @@ export const placeOrderSchema = z
     shippingAddress: addressSchema.optional().nullable(),
     billingAddressSameAsShipping: z.boolean().default(true),
     billingAddress: addressSchema.optional().nullable(),
-    paymentMethod: z.enum(['RAZORPAY', 'COD'], {
-      required_error: 'Payment method is required (RAZORPAY or COD)',
+    paymentMethod: z.enum(['RAZORPAY', 'COD', 'UPI_QR'], {
+      required_error: 'Payment method is required (RAZORPAY, COD, or UPI_QR)',
     }),
+    upiReference: z.string().trim().max(100).optional().nullable(),
     couponCode: z.string().trim().optional().nullable(),
     customerNotes: z.string().trim().max(500).optional().nullable(),
   })
@@ -39,6 +40,18 @@ export const placeOrderSchema = z
     {
       message: 'Please provide either a saved shippingAddressId or complete shippingAddress details',
       path: ['shippingAddress'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.paymentMethod === 'UPI_QR') {
+        return Boolean(data.upiReference && data.upiReference.trim().length >= 6);
+      }
+      return true;
+    },
+    {
+      message: 'A valid UPI Reference / UTR Number (minimum 6 characters) is required for Direct UPI QR payments',
+      path: ['upiReference'],
     }
   );
 

@@ -84,9 +84,9 @@ const getOrCreateAttributeValue = async (tx, attributeName, valueName) => {
  * Retrieves paginated products for admin dashboard
  */
 export const getProductsService = async ({ query }) => {
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
   const {
-    page = 1,
-    limit = 20,
     search,
     categoryId,
     brand,
@@ -95,8 +95,8 @@ export const getProductsService = async ({ query }) => {
     stockStatus,
     minPrice,
     maxPrice,
-    sort = 'newest',
-  } = query;
+  } = query || {};
+  const sort = query?.sort || query?.sortBy || 'newest';
 
   const skip = (page - 1) * limit;
   const where = {};
@@ -122,11 +122,17 @@ export const getProductsService = async ({ query }) => {
     }
   }
 
-  // Price range filter
-  if (minPrice !== undefined || maxPrice !== undefined) {
+  // Price range filter (safely parsed to numbers for Prisma Decimal compatibility)
+  if ((minPrice !== undefined && minPrice !== '') || (maxPrice !== undefined && maxPrice !== '')) {
     where.regularPrice = {};
-    if (minPrice !== undefined) where.regularPrice.gte = minPrice;
-    if (maxPrice !== undefined) where.regularPrice.lte = maxPrice;
+    if (minPrice !== undefined && minPrice !== '') {
+      const parsedMin = parseFloat(minPrice);
+      if (!isNaN(parsedMin)) where.regularPrice.gte = parsedMin;
+    }
+    if (maxPrice !== undefined && maxPrice !== '') {
+      const parsedMax = parseFloat(maxPrice);
+      if (!isNaN(parsedMax)) where.regularPrice.lte = parsedMax;
+    }
   }
 
   // Search filter

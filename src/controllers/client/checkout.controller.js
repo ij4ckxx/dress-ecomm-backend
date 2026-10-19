@@ -45,11 +45,16 @@ export const createOrder = async (req, res, next) => {
       payload: req.body,
     });
 
+    let successMessage = 'Order created, please complete payment with Razorpay';
+    if (result.order.paymentMethod === 'COD') {
+      successMessage = 'Order placed successfully via Cash on Delivery';
+    } else if (result.order.paymentMethod === 'UPI_QR') {
+      successMessage = 'Order placed successfully via Direct UPI QR Payment. Awaiting payment verification.';
+    }
+
     return sendSuccess(res, {
       statusCode: HTTP_STATUS.CREATED,
-      message: result.order.paymentMethod === 'COD'
-        ? 'Order placed successfully via Cash on Delivery'
-        : 'Order created, please complete payment with Razorpay',
+      message: successMessage,
       data: result,
     });
   } catch (error) {

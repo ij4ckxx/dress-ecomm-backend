@@ -19,8 +19,10 @@ const toNumber = (val) => Number(val) || 0;
  * @returns {Promise<object>}
  */
 export const getCustomerOrdersService = async ({ userId, query }) => {
-  const { page = 1, limit = 10, status = 'ALL' } = query;
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 10));
   const skip = (page - 1) * limit;
+  const status = query?.status || 'ALL';
 
   const where = { userId };
   if (status !== 'ALL') {
@@ -40,6 +42,7 @@ export const getCustomerOrdersService = async ({ userId, query }) => {
         status: true,
         paymentStatus: true,
         paymentMethod: true,
+        upiReference: true,
         totalAmount: true,
         courierPartner: true,
         trackingNumber: true,
@@ -69,6 +72,7 @@ export const getCustomerOrdersService = async ({ userId, query }) => {
     status: order.status,
     paymentStatus: order.paymentStatus,
     paymentMethod: order.paymentMethod,
+    upiReference: order.upiReference || null,
     totalAmount: toNumber(order.totalAmount),
     itemsCount: order.items.reduce((acc, item) => acc + item.quantity, 0),
     items: order.items.map((item) => ({
@@ -149,6 +153,7 @@ export const getCustomerOrderByNumberService = async ({ userId, orderNumber }) =
     status: order.status,
     paymentStatus: order.paymentStatus,
     paymentMethod: order.paymentMethod,
+    upiReference: order.upiReference || null,
     customerName: order.customerName,
     customerEmail: order.customerEmail,
     customerPhone: order.customerPhone || null,

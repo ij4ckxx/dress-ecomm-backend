@@ -12,16 +12,16 @@ const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code 
  * Retrieves paginated audit logs with search and filtering
  */
 export const getAuditLogsService = async ({ query }) => {
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
   const {
-    page = 1,
-    limit = 20,
     action,
     entity,
     userId,
     startDate,
     endDate,
     search,
-  } = query;
+  } = query || {};
 
   const skip = (page - 1) * limit;
   const where = {};

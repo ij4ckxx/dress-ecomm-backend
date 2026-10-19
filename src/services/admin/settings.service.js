@@ -1,5 +1,6 @@
 import prisma from '../../config/db.js';
 import { logAdminAction } from '../../utils/auditLogger.js';
+import { ENV } from '../../config/env.js';
 
 const DEFAULT_CONFIG_ID = 'default_store_config';
 
@@ -16,6 +17,16 @@ const DEFAULT_FEATURE_FLAGS = {
   recommendations: true,
   sizeChart: true,
   orderTracking: true,
+};
+
+export const DEFAULT_PAYMENT_METHODS = {
+  enableRazorpay: process.env.ENABLE_RAZORPAY !== 'false',
+  enableCod: process.env.ENABLE_COD !== 'false',
+  enableUpiQr: process.env.ENABLE_UPI_QR !== 'false',
+  upiId: ENV.DEFAULT_UPI_ID,
+  payeeName: ENV.DEFAULT_UPI_PAYEE_NAME,
+  instructions: ENV.DEFAULT_UPI_INSTRUCTIONS,
+  codMaxLimit: ENV.DEFAULT_COD_MAX_LIMIT,
 };
 
 /**
@@ -35,18 +46,28 @@ export const getStoreSettingsService = async () => {
         id: DEFAULT_CONFIG_ID,
         storeName: 'Maison De Élégance',
         tagline: 'Haute Couture & Bespoke Eveningwear',
-        currency: 'INR',
-        currencySymbol: '₹',
+        currency: ENV.DEFAULT_CURRENCY,
+        currencySymbol: ENV.DEFAULT_CURRENCY_SYMBOL,
         supportEmail: 'concierge@maisondeelegance.com',
         supportPhone: '+91 98765 43210',
         activeTheme: 'luxury-fashion',
-        freeShippingThreshold: 2999,
-        flatShippingRate: 150,
+        freeShippingThreshold: ENV.DEFAULT_FREE_SHIPPING_THRESHOLD,
+        flatShippingRate: ENV.DEFAULT_FLAT_SHIPPING_RATE,
         featuresJson: DEFAULT_FEATURE_FLAGS,
+        paymentMethodsJson: DEFAULT_PAYMENT_METHODS,
         policiesJson: {
           shippingPolicy: 'Complimentary white-glove express delivery on luxury orders above ₹2,999.',
           returnPolicy: '7-day complimentary bespoke concierge returns for un-altered garments.',
         },
+      },
+    });
+  } else if (!config.paymentMethodsJson) {
+    // If existing record didn't have paymentMethodsJson populated yet
+    config = await prisma.storeConfig.update({
+      where: { id: DEFAULT_CONFIG_ID },
+      data: { paymentMethodsJson: DEFAULT_PAYMENT_METHODS },
+      include: {
+        updatedBy: { select: { id: true, name: true, email: true, role: true } },
       },
     });
   }

@@ -42,13 +42,11 @@ export const getOrCreateCustomerWishlist = async (userId, tx = prisma) => {
  * @returns {Promise<object>}
  */
 export const getCustomerWishlistService = async ({ userId, query }) => {
-  const {
-    page = 1,
-    limit = 10,
-    search,
-    sort = 'newest',
-    inStock = 'all',
-  } = query;
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 10));
+  const search = query?.search;
+  const sort = query?.sort || query?.sortBy || 'newest';
+  const inStock = query?.inStock || 'all';
 
   const skip = (page - 1) * limit;
   const wishlist = await getOrCreateCustomerWishlist(userId);

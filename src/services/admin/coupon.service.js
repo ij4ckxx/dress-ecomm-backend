@@ -12,14 +12,14 @@ const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code 
  * Retrieves paginated coupons with quota analytics
  */
 export const getCouponsService = async ({ query }) => {
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
   const {
-    page = 1,
-    limit = 20,
     search,
     status = 'ALL',
     discountType = 'ALL',
     sort = 'newest',
-  } = query;
+  } = query || {};
 
   const skip = (page - 1) * limit;
   const where = {};

@@ -120,7 +120,9 @@ export const createUserService = async ({ creator, userData }) => {
  * Retrieves a paginated list of users visible to the current admin
  */
 export const getUsersService = async ({ currentUser, query }) => {
-  const { page = 1, limit = 20, role, search, isActive } = query;
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
+  const { role, search, isActive } = query || {};
   const skip = (page - 1) * limit;
 
   // Build hierarchical visibility filter

@@ -13,7 +13,9 @@ const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code 
  * Retrieves paginated promotional hero campaigns
  */
 export const getPromotionsService = async ({ query }) => {
-  const { page = 1, limit = 20, search, status = 'ALL', sort = 'sortOrder_asc' } = query;
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
+  const { search, status = 'ALL', sort = 'sortOrder_asc' } = query || {};
   const skip = (page - 1) * limit;
   const where = {};
   const now = new Date();

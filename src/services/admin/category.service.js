@@ -89,7 +89,9 @@ const getAncestors = async (category) => {
  */
 export const getCategoriesService = async (params = {}) => {
   const query = params.query || params;
-  const { view = 'tree', search, isActive, isFeatured, parentId, page = 1, limit = 50 } = query;
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 50));
+  const { view = 'tree', search, isActive, isFeatured, parentId } = query || {};
 
   const where = {};
   if (isActive !== undefined) where.isActive = isActive;

@@ -32,3 +32,19 @@ export const adminAuthLimiter = rateLimit({
     error: { code: 'AUTH_RATE_LIMIT_EXCEEDED' },
   },
 });
+
+/**
+ * Public authentication rate limiter (protects login, register, forgot-password against brute force)
+ */
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 attempts per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,
+    message: 'Too many authentication attempts. Please try again after 15 minutes.',
+    error: { code: 'AUTH_RATE_LIMIT_EXCEEDED' },
+  },
+});

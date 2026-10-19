@@ -12,14 +12,14 @@ const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code 
  * Retrieves flattened inventory rows with stock status and summary counters
  */
 export const getInventoryService = async ({ query }) => {
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
   const {
-    page = 1,
-    limit = 20,
     search,
     status = 'ALL',
     categoryId,
     sort = 'stock_asc',
-  } = query;
+  } = query || {};
 
   const skip = (page - 1) * limit;
 
@@ -321,7 +321,9 @@ export const adjustStockService = async ({ adminUser, adjustData }) => {
  * Retrieves paginated inventory audit transaction logs
  */
 export const getInventoryTransactionsService = async ({ query }) => {
-  const { page = 1, limit = 20, variantId, productId, type, startDate, endDate } = query;
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
+  const { variantId, productId, type, startDate, endDate } = query || {};
   const skip = (page - 1) * limit;
 
   const where = {};

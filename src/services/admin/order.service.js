@@ -30,9 +30,9 @@ const VALID_TRANSITIONS = {
  * Retrieves paginated orders with rich filters and fulfillment summary counters
  */
 export const getOrdersService = async ({ query }) => {
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
   const {
-    page = 1,
-    limit = 20,
     search,
     status = 'ALL',
     paymentStatus = 'ALL',
@@ -42,7 +42,7 @@ export const getOrdersService = async ({ query }) => {
     minAmount,
     maxAmount,
     sort = 'newest',
-  } = query;
+  } = query || {};
 
   const skip = (page - 1) * limit;
   const where = {};
@@ -532,6 +532,7 @@ export const exportOrdersCsvService = async ({ query }) => {
       'Order Status': o.status,
       'Payment Status': o.paymentStatus,
       'Payment Method': o.paymentMethod,
+      'UPI Reference (UTR)': o.upiReference || 'N/A',
       'Items': itemsSummary,
       'Total Units': o.items.reduce((s, i) => s + i.quantity, 0),
       'Total Amount (INR)': Number(o.totalAmount),
@@ -561,9 +562,14 @@ export const updateOrderPaymentStatusService = async ({ orderId, adminUser, paym
   }
 
   const updatedOrder = await prisma.$transaction(async (tx) => {
+    const orderUpdateData = { paymentStatus };
+    if (transactionId && order.paymentMethod === 'UPI_QR') {
+      orderUpdateData.upiReference = transactionId;
+    }
+
     const updated = await tx.order.update({
       where: { id: orderId },
-      data: { paymentStatus },
+      data: orderUpdateData,
     });
 
     const paymentAmount = amount !== undefined && amount !== null ? amount : order.totalAmount;

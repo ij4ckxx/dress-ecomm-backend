@@ -23,6 +23,7 @@ enum PaymentGatewayType {
   RAZORPAY
   STRIPE
   COD
+  UPI_QR
 }
 
 model Order {
@@ -36,11 +37,12 @@ model Order {
   subtotal           Decimal            @db.Decimal(10, 2)
   discountAmount     Decimal            @default(0) @db.Decimal(10, 2)
   taxAmount          Decimal            @default(0) @db.Decimal(10, 2)
-  shippingAmount     Decimal            @default(0) @db.Decimal(10, 2)
+  shippingAmount     Decimal            @default(150.00) @db.Decimal(10, 2)
   totalAmount        Decimal            @db.Decimal(10, 2)
   status             OrderStatus        @default(PENDING)
   paymentStatus      PaymentStatus      @default(PENDING)
   paymentMethod      PaymentGatewayType @default(RAZORPAY)
+  upiReference       String?            // Customer's 12-digit UTR / reference number for UPI_QR
   shippingAddress    Json               // { street, city, state, postalCode, country, landmark }
   billingAddress     Json?
   trackingNumber     String?

@@ -13,7 +13,9 @@ const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code 
  * Retrieves paginated collections for admin table
  */
 export const getCollectionsService = async ({ query }) => {
-  const { page = 1, limit = 20, search, isFeatured, isActive } = query;
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 20));
+  const { search, isFeatured, isActive } = query || {};
   const skip = (page - 1) * limit;
 
   const where = {};

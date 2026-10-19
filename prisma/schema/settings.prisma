@@ -11,6 +11,7 @@ model StoreConfig {
   flatShippingRate      Decimal  @default(150) @db.Decimal(10, 2)
   featuresJson          Json     // Object with boolean feature flags
   policiesJson          Json?    // Optional object with shipping, returns, and terms text
+  paymentMethodsJson    Json?    // Stores PaymentMethodsConfig (Razorpay, COD, UPI_QR)
   updatedById           String?
   updatedBy             User?    @relation("ConfigUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt             DateTime @updatedAt

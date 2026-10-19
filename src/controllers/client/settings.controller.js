@@ -1,6 +1,6 @@
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
-import { getStoreSettingsService } from '../../services/admin/settings.service.js';
+import { getStoreSettingsService, DEFAULT_PAYMENT_METHODS } from '../../services/admin/settings.service.js';
 
 /**
  * Controller to fetch public store configuration & feature flags for the customer storefront
@@ -28,6 +28,7 @@ export const getPublicSettings = async (req, res, next) => {
         : Number(config.flatShippingRate),
       features: config.featuresJson,
       policies: config.policiesJson,
+      paymentMethods: config.paymentMethodsJson || DEFAULT_PAYMENT_METHODS,
     };
 
     return sendSuccess(res, {
@@ -39,3 +40,24 @@ export const getPublicSettings = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Controller to fetch public active payment methods config
+ * GET /api/v1/settings/payment-methods
+ * GET /api/settings/payment-methods
+ */
+export const getPublicPaymentMethods = async (req, res, next) => {
+  try {
+    const config = await getStoreSettingsService();
+    const paymentMethods = config.paymentMethodsJson || DEFAULT_PAYMENT_METHODS;
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Payment methods config retrieved successfully',
+      data: paymentMethods,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
