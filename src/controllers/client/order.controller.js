@@ -151,10 +151,10 @@ export const customerReorder = async (req, res, next) => {
  */
 export const trackOrder = async (req, res, next) => {
   try {
-    const orderNumber = req.params.orderNumber || req.query.orderNumber || req.body.orderNumber;
-    const email = req.query.email || req.body.email;
-    const phone = req.query.phone || req.body.phone;
-    const emailOrPhone = req.query.emailOrPhone || req.body.emailOrPhone;
+    const orderNumber = req.params?.orderNumber || req.query?.orderNumber || req.body?.orderNumber;
+    const email = req.query?.email || req.body?.email;
+    const phone = req.query?.phone || req.body?.phone;
+    const emailOrPhone = req.query?.emailOrPhone || req.body?.emailOrPhone;
     const userId = req.user?.id || null;
 
     const trackingDetails = await trackOrderService({

@@ -112,8 +112,16 @@ export const getCustomerOrdersService = async ({ userId, query }) => {
  * @returns {Promise<object>}
  */
 export const getCustomerOrderByNumberService = async ({ userId, orderNumber }) => {
+  const cleanOrderNumber = String(orderNumber || '').trim().replace(/^#+/, '').trim();
   const order = await prisma.order.findFirst({
-    where: { orderNumber, userId },
+    where: {
+      userId,
+      OR: [
+        { orderNumber: cleanOrderNumber },
+        { orderNumber: `#${cleanOrderNumber}` },
+        { orderNumber: { equals: cleanOrderNumber, mode: 'insensitive' } },
+      ],
+    },
     include: {
       items: {
         include: {
@@ -226,8 +234,16 @@ export const getCustomerOrderByNumberService = async ({ userId, orderNumber }) =
  * @returns {Promise<object>}
  */
 export const customerCancelOrderService = async ({ userId, orderNumber, reason }) => {
+  const cleanOrderNumber = String(orderNumber || '').trim().replace(/^#+/, '').trim();
   const order = await prisma.order.findFirst({
-    where: { orderNumber, userId },
+    where: {
+      userId,
+      OR: [
+        { orderNumber: cleanOrderNumber },
+        { orderNumber: `#${cleanOrderNumber}` },
+        { orderNumber: { equals: cleanOrderNumber, mode: 'insensitive' } },
+      ],
+    },
     include: { items: true },
   });
 
@@ -360,8 +376,16 @@ export const customerCancelOrderService = async ({ userId, orderNumber, reason }
  * @returns {Promise<object>}
  */
 export const customerReorderService = async ({ userId, orderNumber }) => {
+  const cleanOrderNumber = String(orderNumber || '').trim().replace(/^#+/, '').trim();
   const order = await prisma.order.findFirst({
-    where: { orderNumber, userId },
+    where: {
+      userId,
+      OR: [
+        { orderNumber: cleanOrderNumber },
+        { orderNumber: `#${cleanOrderNumber}` },
+        { orderNumber: { equals: cleanOrderNumber, mode: 'insensitive' } },
+      ],
+    },
     include: { items: true },
   });
 
@@ -470,8 +494,16 @@ export const trackOrderService = async ({ orderNumber, email, phone, emailOrPhon
     throw new AppError('Valid order number is required', HTTP_STATUS.BAD_REQUEST, 'ORDER_NUMBER_REQUIRED');
   }
 
-  const order = await prisma.order.findUnique({
-    where: { orderNumber: orderNumber.trim() },
+  const cleanOrderNumber = String(orderNumber).trim().replace(/^#+/, '').trim();
+
+  const order = await prisma.order.findFirst({
+    where: {
+      OR: [
+        { orderNumber: cleanOrderNumber },
+        { orderNumber: `#${cleanOrderNumber}` },
+        { orderNumber: { equals: cleanOrderNumber, mode: 'insensitive' } },
+      ],
+    },
     include: {
       items: {
         include: {
