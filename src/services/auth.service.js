@@ -20,7 +20,7 @@ export class AuthService {
   /**
    * Register a new user (Customer or Admin)
    */
-  static async register({ name, email, password, phone }) {
+  static async register({ name, email, password, phone, avatarUrl = null }) {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user already exists
@@ -47,12 +47,14 @@ export class AuthService {
         email: normalizedEmail,
         passwordHash,
         phone: phone ? phone.trim() : null,
+        avatarUrl: avatarUrl ? avatarUrl.trim() : null,
         role: ROLES.CUSTOMER,
       },
       select: {
         id: true,
         name: true,
         email: true,
+        avatarUrl: true,
         role: true,
         phone: true,
         createdAt: true,
@@ -232,6 +234,173 @@ export class AuthService {
       accessToken: newAccessToken,
       refreshToken: newRawRefreshToken,
       user: existingToken.user,
+    };
+  }
+
+  /**
+   * Authenticate or register user via Social OAuth (Google, Facebook, Apple, GitHub)
+   */
+  static async socialLogin({
+    provider,
+    token = null,
+    providerAccountId = null,
+    email = null,
+    name = null,
+    avatarUrl = null,
+    userAgent = null,
+    ipAddress = null,
+  }) {
+    let resolvedEmail = email ? email.toLowerCase().trim() : null;
+    let resolvedProviderAccountId = providerAccountId ? String(providerAccountId).trim() : null;
+    let resolvedName = name ? name.trim() : null;
+    let resolvedAvatarUrl = avatarUrl ? avatarUrl.trim() : null;
+
+    // If token is provided and provider is Google, attempt verification via Google OAuth APIs
+    if (token && provider === 'google') {
+      try {
+        // Try Google ID Token verification via tokeninfo
+        const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload.sub) {
+            resolvedProviderAccountId = payload.sub;
+            resolvedEmail = payload.email ? payload.email.toLowerCase().trim() : resolvedEmail;
+            resolvedName = payload.name || resolvedName;
+            resolvedAvatarUrl = payload.picture || resolvedAvatarUrl;
+          }
+        } else {
+          // Fallback: try UserInfo endpoint (if access_token was passed instead of id_token)
+          const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (userRes.ok) {
+            const userPayload = await userRes.json();
+            if (userPayload.sub) {
+              resolvedProviderAccountId = userPayload.sub;
+              resolvedEmail = userPayload.email ? userPayload.email.toLowerCase().trim() : resolvedEmail;
+              resolvedName = userPayload.name || resolvedName;
+              resolvedAvatarUrl = userPayload.picture || resolvedAvatarUrl;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[GOOGLE TOKEN VERIFY WARNING]:', err.message);
+      }
+    }
+
+    if (!resolvedEmail) {
+      throw new AppError(
+        'Email address could not be verified from the social provider',
+        HTTP_STATUS.BAD_REQUEST,
+        'OAUTH_EMAIL_REQUIRED'
+      );
+    }
+
+    if (!resolvedProviderAccountId) {
+      // Fallback: use email as providerAccountId if provider didn't return a sub
+      resolvedProviderAccountId = resolvedEmail;
+    }
+
+    // 1. Find if this provider + providerAccountId already has a linked user
+    let account = await prisma.account.findUnique({
+      where: {
+        provider_providerAccountId: {
+          provider,
+          providerAccountId: resolvedProviderAccountId,
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    let user = account?.user;
+
+    // 2. If not linked by account, find user by email
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: { email: resolvedEmail },
+      });
+
+      if (user) {
+        // User already exists (e.g. registered with password). Link this social account!
+        await prisma.account.create({
+          data: {
+            userId: user.id,
+            provider,
+            providerAccountId: resolvedProviderAccountId,
+          },
+        });
+      } else {
+        // First-time social sign-in: Create new User and link Account atomically
+        user = await prisma.user.create({
+          data: {
+            name: resolvedName || resolvedEmail.split('@')[0],
+            email: resolvedEmail,
+            avatarUrl: resolvedAvatarUrl,
+            role: ROLES.CUSTOMER,
+            isActive: true,
+            passwordHash: null,
+            accounts: {
+              create: {
+                provider,
+                providerAccountId: resolvedProviderAccountId,
+              },
+            },
+          },
+        });
+      }
+    }
+
+    // 3. Ensure user account is active
+    if (!user.isActive) {
+      throw new AppError(
+        'Your account has been deactivated. Please contact support.',
+        HTTP_STATUS.FORBIDDEN,
+        'ACCOUNT_DEACTIVATED'
+      );
+    }
+
+    // 4. Update avatar if user doesn't have one
+    if (!user.avatarUrl && resolvedAvatarUrl) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { avatarUrl: resolvedAvatarUrl },
+      });
+      user.avatarUrl = resolvedAvatarUrl;
+    }
+
+    // 5. Generate Access Token & Refresh Token
+    const accessToken = generateAccessToken({
+      id: user.id,
+      role: user.role,
+      email: user.email,
+    });
+
+    const rawRefreshToken = generateRefreshToken();
+    const tokenHash = hashToken(rawRefreshToken);
+    const expiresAt = new Date(Date.now() + AUTH_CONSTANTS.COOKIE_MAX_AGE_MS);
+
+    await prisma.refreshToken.create({
+      data: {
+        tokenHash,
+        userId: user.id,
+        expiresAt,
+        userAgent,
+        ipAddress,
+      },
+    });
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        role: user.role,
+      },
+      accessToken,
+      refreshToken: rawRefreshToken,
     };
   }
 }

@@ -22,6 +22,12 @@ export const registerSchema = z.object({
     .string()
     .trim()
     .optional(),
+  avatarUrl: z
+    .string()
+    .trim()
+    .url({ message: 'Avatar must be a valid URL' })
+    .optional()
+    .nullable(),
 });
 
 export const loginSchema = z.object({
@@ -64,4 +70,28 @@ export const resetPasswordSchema = z.object({
     .regex(/[A-Za-z]/, { message: 'Password must contain at least one letter' })
     .regex(/[0-9]/, { message: 'Password must contain at least one number' }),
 });
+
+export const socialLoginSchema = z
+  .object({
+    provider: z.enum(['google', 'facebook', 'github', 'apple'], {
+      required_error: 'Provider is required (google, facebook, github, apple)',
+    }),
+    token: z.string().trim().optional(),
+    providerAccountId: z.string().trim().optional(),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email({ message: 'Please provide a valid email address' })
+      .optional(),
+    name: z.string().trim().max(100).optional(),
+    avatarUrl: z.string().trim().url({ message: 'Avatar must be a valid URL' }).optional().nullable(),
+  })
+  .refine(
+    (data) => Boolean(data.token || (data.providerAccountId && data.email)),
+    {
+      message: 'Either an OAuth token OR both providerAccountId and email must be provided',
+      path: ['token'],
+    }
+  );
 

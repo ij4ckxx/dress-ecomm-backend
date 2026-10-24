@@ -12,12 +12,13 @@ import {
  */
 export const listCollections = async (req, res, next) => {
   try {
-    const collections = await getClientCollections();
+    const result = await getClientCollections({ query: req.query });
 
     return sendSuccess(res, {
       statusCode: HTTP_STATUS.OK,
       message: 'Collections fetched successfully',
-      data: collections,
+      data: result.collections,
+      pagination: result.pagination,
     });
   } catch (error) {
     next(error);
@@ -32,7 +33,7 @@ export const listCollections = async (req, res, next) => {
 export const getCollectionDetails = async (req, res, next) => {
   try {
     const { slug } = req.params;
-    const collection = await getClientCollectionBySlug(slug);
+    const collection = await getClientCollectionBySlug(slug, { query: req.query });
 
     return sendSuccess(res, {
       statusCode: HTTP_STATUS.OK,

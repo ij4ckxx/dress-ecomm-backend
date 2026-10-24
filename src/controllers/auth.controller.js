@@ -7,14 +7,25 @@ import { sendSuccess } from '../utils/apiResponse.js';
 import { HTTP_STATUS } from '../constants/httpStatusCodes.js';
 import { AUTH_CONSTANTS } from '../constants/auth.constants.js';
 import { ENV } from '../config/env.js';
+import { uploadImageToCloudinary } from '../utils/cloudinary.js';
 
 export class AuthController {
   /**
-   * Register a new user
+   * Register a new user (supports direct avatar file upload OR avatarUrl string)
    */
   static async register(req, res, next) {
     try {
-      const user = await AuthService.register(req.body);
+      let avatarUrl = req.body.avatarUrl || null;
+
+      if (req.file) {
+        const uploaded = await uploadImageToCloudinary(req.file.buffer, 'dresses/avatars');
+        avatarUrl = uploaded.url;
+      }
+
+      const user = await AuthService.register({
+        ...req.body,
+        avatarUrl,
+      });
 
       return sendSuccess(res, {
         statusCode: HTTP_STATUS.CREATED,
@@ -53,6 +64,47 @@ export class AuthController {
       return sendSuccess(res, {
         statusCode: HTTP_STATUS.OK,
         message: 'Login successful',
+        data: {
+          user,
+          accessToken,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Log in or register user via Social OAuth (Google, Facebook, Apple, GitHub)
+   */
+  static async socialLogin(req, res, next) {
+    try {
+      const { provider, token, providerAccountId, email, name, avatarUrl } = req.body;
+      const userAgent = req.headers['user-agent'] || null;
+      const ipAddress = req.ip || req.connection?.remoteAddress || null;
+
+      const { user, accessToken, refreshToken } = await AuthService.socialLogin({
+        provider,
+        token,
+        providerAccountId,
+        email,
+        name,
+        avatarUrl,
+        userAgent,
+        ipAddress,
+      });
+
+      // Set secure HttpOnly cookie for the refresh token
+      res.cookie(AUTH_CONSTANTS.REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+        httpOnly: true,
+        secure: ENV.NODE_ENV === 'production',
+        sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: AUTH_CONSTANTS.COOKIE_MAX_AGE_MS,
+      });
+
+      return sendSuccess(res, {
+        statusCode: HTTP_STATUS.OK,
+        message: 'Social login successful',
         data: {
           user,
           accessToken,
