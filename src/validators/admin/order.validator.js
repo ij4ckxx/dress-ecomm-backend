@@ -107,3 +107,13 @@ export const metafieldParamSchema = z.object({
   id: z.string().uuid('Invalid Order ID format'),
   metafieldId: z.string().uuid('Invalid Metafield ID format'),
 });
+
+export const addOrderCheckpointSchema = z.object({
+  comment: z
+    .string({ required_error: 'Checkpoint message / comment is required' })
+    .trim()
+    .min(2, 'Checkpoint comment must be at least 2 characters')
+    .max(500, 'Checkpoint comment cannot exceed 500 characters'),
+  status: z.enum(ORDER_STATUS_ENUM).optional(),
+  location: z.string().trim().max(100).optional().nullable(),
+});

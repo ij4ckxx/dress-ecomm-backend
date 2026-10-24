@@ -35,3 +35,17 @@ export const customerCancelOrderSchema = z.object({
     .max(500, 'Cancellation reason cannot exceed 500 characters')
     .optional(),
 });
+
+export const trackOrderQuerySchema = z.object({
+  orderNumber: z.string().trim().min(3, 'Order number must be at least 3 characters').optional(),
+  email: z.string().trim().email('Invalid email address').optional(),
+  phone: z.string().trim().min(6, 'Phone number must be at least 6 digits').optional(),
+  emailOrPhone: z.string().trim().optional(),
+});
+
+export const trackOrderBodySchema = z.object({
+  orderNumber: z.string({ required_error: 'Order number is required' }).trim().min(3, 'Order number must be at least 3 characters'),
+  email: z.string().trim().email('Invalid email address').optional(),
+  phone: z.string().trim().min(6, 'Phone number must be at least 6 digits').optional(),
+  emailOrPhone: z.string().trim().optional(),
+});

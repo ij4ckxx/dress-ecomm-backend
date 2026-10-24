@@ -1,10 +1,12 @@
 import { Router } from 'express';
-import { authenticate } from '../../middlewares/auth.middleware.js';
+import { authenticate, optionalAuthenticate } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
 import {
   orderNumberParamSchema,
   customerOrderQuerySchema,
   customerCancelOrderSchema,
+  trackOrderQuerySchema,
+  trackOrderBodySchema,
 } from '../../validators/client/order.validator.js';
 import {
   getCustomerOrders,
@@ -12,11 +14,39 @@ import {
   getOrderConfirmation,
   customerCancelOrder,
   customerReorder,
+  trackOrder,
 } from '../../controllers/client/order.controller.js';
 
 const router = Router();
 
-// All customer order endpoints require customer authentication
+/**
+ * @route   GET /api/v1/orders/track
+ * @desc    Public & authenticated order tracking by orderNumber and email/phone query
+ * @access  Public / Optional Authenticated Customer
+ */
+router.get('/track', optionalAuthenticate, validateQuery(trackOrderQuerySchema), trackOrder);
+
+/**
+ * @route   POST /api/v1/orders/track
+ * @desc    Public & authenticated order tracking via form body
+ * @access  Public / Optional Authenticated Customer
+ */
+router.post('/track', optionalAuthenticate, validate(trackOrderBodySchema), trackOrder);
+
+/**
+ * @route   GET /api/v1/orders/:orderNumber/track
+ * @desc    Direct order tracking endpoint (logged-in user or guest with ?email= / ?phone=)
+ * @access  Public / Optional Authenticated Customer
+ */
+router.get(
+  '/:orderNumber/track',
+  optionalAuthenticate,
+  validateParams(orderNumberParamSchema),
+  validateQuery(trackOrderQuerySchema.partial()),
+  trackOrder
+);
+
+// All customer account order management endpoints require customer authentication
 router.use(authenticate);
 
 /**

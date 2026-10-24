@@ -11,6 +11,7 @@ import {
   upsertOrderMetafieldService,
   deleteOrderMetafieldService,
   deleteOrderService,
+  addOrderCheckpointService,
 } from '../../services/admin/order.service.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
@@ -260,6 +261,28 @@ export const deleteOrder = async (req, res, next) => {
       statusCode: HTTP_STATUS.OK,
       message: `Order #${deleted.orderNumber} deleted successfully`,
       data: deleted,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Add tracking checkpoint / progress update to order timeline
+ * POST /api/v1/admin/orders/:id/checkpoints
+ */
+export const addOrderCheckpoint = async (req, res, next) => {
+  try {
+    const checkpoint = await addOrderCheckpointService({
+      orderId: req.params.id,
+      adminUser: req.user,
+      checkpointData: req.body,
+    });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.CREATED,
+      message: 'Tracking checkpoint added successfully',
+      data: { checkpoint },
     });
   } catch (error) {
     next(error);

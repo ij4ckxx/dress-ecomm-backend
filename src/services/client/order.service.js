@@ -3,6 +3,13 @@ import { AppError } from '../../middlewares/errorHandler.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { addItemToCart, getCartDetails } from './cart.service.js';
 import { sendCustomerOrderCancellationEmail } from '../notification/email.service.js';
+import {
+  buildOrderTrackingTimeline,
+  maskEmail,
+  maskPhone,
+  maskName,
+  maskAddress,
+} from '../../utils/orderTimeline.js';
 
 /**
  * Helper to convert numerical values to standard numbers
@@ -194,6 +201,7 @@ export const getCustomerOrderByNumberService = async ({ userId, orderNumber }) =
       amount: toNumber(p.amount),
     })),
     statusHistory: order.statusHistory,
+    tracking: buildOrderTrackingTimeline(order, order.statusHistory),
     metafields: (Array.isArray(order.metafields) ? order.metafields : [])
       .filter((m) => m.isPublic !== false)
       .map((m) => ({
@@ -444,5 +452,115 @@ export const customerReorderService = async ({ userId, orderNumber }) => {
     addedItems,
     skippedItems,
     cart,
+  };
+};
+
+/**
+ * Retrieves standalone order tracking details for both authenticated and guest customers
+ * @param {object} params
+ * @param {string} params.orderNumber
+ * @param {string} [params.email]
+ * @param {string} [params.phone]
+ * @param {string} [params.emailOrPhone]
+ * @param {string} [params.userId]
+ * @returns {Promise<object>}
+ */
+export const trackOrderService = async ({ orderNumber, email, phone, emailOrPhone, userId = null }) => {
+  if (!orderNumber || typeof orderNumber !== 'string') {
+    throw new AppError('Valid order number is required', HTTP_STATUS.BAD_REQUEST, 'ORDER_NUMBER_REQUIRED');
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { orderNumber: orderNumber.trim() },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: { id: true, name: true, slug: true, brand: true },
+          },
+        },
+      },
+      statusHistory: {
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new AppError('Order not found with the provided details', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
+  }
+
+  // Determine authorization & authentication state
+  const isOwner = Boolean(userId && order.userId === userId);
+
+  // If not logged-in owner, verify email or phone
+  if (!isOwner) {
+    const candidateEmail = (email || emailOrPhone || '').trim().toLowerCase();
+    const candidatePhone = (phone || emailOrPhone || '').replace(/\D/g, '').slice(-10);
+
+    const orderEmail = (order.customerEmail || '').trim().toLowerCase();
+    const orderPhone = (order.customerPhone || '').replace(/\D/g, '').slice(-10);
+
+    const hasContactInput = Boolean(candidateEmail || candidatePhone);
+    if (!hasContactInput) {
+      throw new AppError(
+        'Please provide the email address or phone number associated with this order to view tracking details.',
+        HTTP_STATUS.UNAUTHORIZED,
+        'VERIFICATION_REQUIRED'
+      );
+    }
+
+    const emailMatches = candidateEmail.includes('@') && orderEmail === candidateEmail;
+    const phoneMatches = candidatePhone.length >= 6 && orderPhone && orderPhone.endsWith(candidatePhone);
+
+    if (!emailMatches && !phoneMatches) {
+      throw new AppError(
+        'Order details could not be verified. Please check the order number and email or phone number entered.',
+        HTTP_STATUS.NOT_FOUND,
+        'ORDER_VERIFICATION_FAILED'
+      );
+    }
+  }
+
+  const tracking = buildOrderTrackingTimeline(order, order.statusHistory);
+
+  return {
+    orderNumber: order.orderNumber,
+    createdAt: order.createdAt,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod,
+    totalAmount: toNumber(order.totalAmount),
+    currency: 'INR',
+    itemsCount: order.items.reduce((acc, item) => acc + item.quantity, 0),
+    items: order.items.map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      variantId: item.variantId,
+      title: item.title,
+      sku: item.sku,
+      size: item.size || null,
+      color: item.color || null,
+      imageUrl: item.imageUrl || null,
+      price: toNumber(item.price),
+      quantity: item.quantity,
+      totalPrice: toNumber(item.totalPrice),
+      productSlug: item.product?.slug || null,
+    })),
+    customer: isOwner
+      ? {
+          name: order.customerName,
+          email: order.customerEmail,
+          phone: order.customerPhone || null,
+        }
+      : {
+          name: maskName(order.customerName),
+          email: maskEmail(order.customerEmail),
+          phone: maskPhone(order.customerPhone),
+        },
+    shippingAddress: isOwner
+      ? order.shippingAddress
+      : maskAddress(order.shippingAddress),
+    tracking,
   };
 };

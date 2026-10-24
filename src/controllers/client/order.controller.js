@@ -5,6 +5,7 @@ import {
   getCustomerOrderByNumberService,
   customerCancelOrderService,
   customerReorderService,
+  trackOrderService,
 } from '../../services/client/order.service.js';
 import { getOrderConfirmationByNumber } from '../../services/client/checkout.service.js';
 
@@ -136,6 +137,38 @@ export const customerReorder = async (req, res, next) => {
       statusCode: HTTP_STATUS.OK,
       message,
       data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller to track order for both authenticated customers and unauthenticated guests
+ * GET /api/v1/orders/track
+ * POST /api/v1/orders/track
+ * GET /api/v1/orders/:orderNumber/track
+ */
+export const trackOrder = async (req, res, next) => {
+  try {
+    const orderNumber = req.params.orderNumber || req.query.orderNumber || req.body.orderNumber;
+    const email = req.query.email || req.body.email;
+    const phone = req.query.phone || req.body.phone;
+    const emailOrPhone = req.query.emailOrPhone || req.body.emailOrPhone;
+    const userId = req.user?.id || null;
+
+    const trackingDetails = await trackOrderService({
+      orderNumber,
+      email,
+      phone,
+      emailOrPhone,
+      userId,
+    });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Order tracking details retrieved successfully',
+      data: trackingDetails,
     });
   } catch (error) {
     next(error);

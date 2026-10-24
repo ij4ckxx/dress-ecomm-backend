@@ -3,6 +3,7 @@ import prisma from '../../config/db.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { Parser } from 'json2csv';
 import { sendCodStatusUpdateEmail } from '../notification/email.service.js';
+import { buildOrderTrackingTimeline } from '../../utils/orderTimeline.js';
 
 const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code = 'ERROR') => {
   const error = new Error(message);
@@ -206,7 +207,10 @@ export const getOrderByIdService = async (orderId) => {
     throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
   }
 
-  return order;
+  return {
+    ...order,
+    tracking: buildOrderTrackingTimeline(order, order.statusHistory),
+  };
 };
 
 /**
@@ -807,5 +811,52 @@ export const deleteOrderService = async ({ orderId, adminUser }) => {
     orderNumber: order.orderNumber,
     status: order.status,
   };
+};
+
+/**
+ * Adds an intermediate tracking checkpoint or progress note to the order timeline
+ */
+export const addOrderCheckpointService = async ({ orderId, adminUser, checkpointData }) => {
+  const { comment, status, location } = checkpointData;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+  });
+
+  if (!order) {
+    throw createServiceError('Order not found', HTTP_STATUS.NOT_FOUND, 'ORDER_NOT_FOUND');
+  }
+
+  const previousStatus = order.status;
+  const newStatus = status || order.status;
+  const fullComment = location ? `[${location}] ${comment}` : comment;
+
+  const result = await prisma.$transaction(async (tx) => {
+    if (status && status !== order.status) {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: newStatus },
+      });
+    }
+
+    const checkpoint = await tx.orderStatusHistory.create({
+      data: {
+        orderId,
+        previousStatus,
+        newStatus,
+        comment: fullComment,
+        changedById: adminUser.id,
+      },
+      include: {
+        changedBy: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+    });
+
+    return checkpoint;
+  });
+
+  return result;
 };
 

@@ -12,6 +12,7 @@ import {
   upsertOrderMetafield,
   deleteOrderMetafield,
   deleteOrder,
+  addOrderCheckpoint,
 } from '../../controllers/admin/order.controller.js';
 import { authenticate, requireAdmin, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
@@ -27,6 +28,7 @@ import {
   updatePaymentStatusSchema,
   orderMetafieldSchema,
   metafieldParamSchema,
+  addOrderCheckpointSchema,
 } from '../../validators/admin/order.validator.js';
 
 const router = Router();
@@ -98,6 +100,20 @@ router.patch(
   validateParams(orderParamIdSchema),
   validate(updateOrderShippingSchema),
   updateOrderShipping
+);
+
+/**
+ * @route   POST /api/v1/admin/orders/:id/checkpoints
+ * @desc    Add intermediate tracking checkpoint or timeline event
+ * @access  Private (Admin with orders:write)
+ */
+router.post(
+  '/:id/checkpoints',
+  adminLimiter,
+  requirePermission(PERMISSIONS.ORDERS_WRITE),
+  validateParams(orderParamIdSchema),
+  validate(addOrderCheckpointSchema),
+  addOrderCheckpoint
 );
 
 /**
