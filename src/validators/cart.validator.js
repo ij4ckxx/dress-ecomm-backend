@@ -44,6 +44,16 @@ export const cartItemIdParamsSchema = z.object({
   itemId: z.string().uuid('Invalid cart item ID'),
 });
 
+export const itemModifierInputSchema = z
+  .object({
+    modifierGroupId: z.string().uuid('Invalid modifier group ID').optional(),
+    modifierOptionId: z.string().uuid('Invalid modifier option ID').optional(),
+    textValue: z.string().trim().max(1000).optional().nullable(),
+  })
+  .refine((data) => data.modifierGroupId || data.modifierOptionId, {
+    message: 'Either modifierGroupId or modifierOptionId must be provided',
+  });
+
 export const addCartItemSchema = z.object({
   productId: z.string().uuid('Invalid product ID'),
   variantId: z.string().uuid('Invalid variant ID').nullable().optional(),
@@ -54,6 +64,7 @@ export const addCartItemSchema = z.object({
     .max(CART_LIMITS.MAX_QUANTITY_PER_ITEM, `Quantity cannot exceed ${CART_LIMITS.MAX_QUANTITY_PER_ITEM}`)
     .default(1),
   modifierOptionIds: z.array(z.string().uuid('Invalid modifier option ID')).optional().default([]),
+  modifiers: z.array(itemModifierInputSchema).optional().default([]),
   metafields: z
     .array(
       z.object({
@@ -85,10 +96,17 @@ export const updateCartItemSchema = z
       .max(CART_LIMITS.MAX_QUANTITY_PER_ITEM, `Quantity cannot exceed ${CART_LIMITS.MAX_QUANTITY_PER_ITEM}`)
       .optional(),
     modifierOptionIds: z.array(z.string().uuid('Invalid modifier option ID')).optional(),
+    modifiers: z.array(itemModifierInputSchema).optional(),
   })
-  .refine((data) => data.quantity !== undefined || data.modifierOptionIds !== undefined, {
-    message: 'At least one field (quantity or modifierOptionIds) must be provided for update',
-  });
+  .refine(
+    (data) =>
+      data.quantity !== undefined ||
+      data.modifierOptionIds !== undefined ||
+      data.modifiers !== undefined,
+    {
+      message: 'At least one field (quantity, modifierOptionIds, or modifiers) must be provided for update',
+    }
+  );
 
 export const mergeCartSchema = z.object({
   guestToken: z.string().trim().min(1, 'guestToken is required'),

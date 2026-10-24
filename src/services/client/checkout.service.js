@@ -143,7 +143,12 @@ export const computeCheckoutPricing = async ({
         const delta = Number(m.priceDelta || m.modifierOption?.priceDelta || 0);
         modifierTotal += delta;
         modifierDetails.push({
-          name: m.modifierOption?.name || '',
+          modifierGroupId: m.modifierGroupId || m.modifierOption?.modifierGroupId || null,
+          groupDisplayName: m.modifierGroup?.displayName || m.modifierGroup?.name || m.modifierOption?.modifierGroup?.displayName || m.modifierOption?.modifierGroup?.name || null,
+          modifierType: m.modifierGroup?.type || m.modifierOption?.modifierGroup?.type || null,
+          modifierOptionId: m.modifierOptionId || null,
+          optionName: m.modifierOption?.name || null,
+          textValue: m.textValue || null,
           priceDelta: delta,
         });
       }
@@ -252,7 +257,10 @@ export const getCheckoutSummary = async ({
             },
           },
           modifiers: {
-            include: { modifierOption: true },
+            include: {
+              modifierOption: { include: { modifierGroup: true } },
+              modifierGroup: true,
+            },
           },
         },
       },
@@ -383,7 +391,12 @@ export const placeOrder = async ({ userId, payload }) => {
                 attributes: { include: { attributeValue: { include: { attribute: true } } } },
               },
             },
-            modifiers: { include: { modifierOption: true } },
+            modifiers: {
+              include: {
+                modifierOption: { include: { modifierGroup: true } },
+                modifierGroup: true,
+              },
+            },
           },
         },
       },
@@ -532,6 +545,7 @@ export const placeOrder = async ({ userId, payload }) => {
             price: item.unitPrice,
             quantity: item.quantity,
             totalPrice: item.lineTotal,
+            modifiers: item.modifiers || [],
           })),
         },
       },

@@ -171,20 +171,39 @@ model ProductVariantAttribute {
   @@index([attributeValueId])
 }
 
+enum ModifierType {
+  DROPDOWN
+  RADIO_BUTTONS
+  RECTANGLE_LIST
+  CHECKBOX
+  SHORT_TEXT
+  MULTI_LINE_TEXT
+  NUMBERS_ONLY_TEXT
+  DATE
+  FILE_UPLOAD
+}
+
 model ModifierGroup {
   id           String           @id @default(uuid())
   productId    String
   product      Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
   name         String
+  displayName  String?
+  type         ModifierType     @default(DROPDOWN)
+  defaultValue String?
+  config       Json?            @default("{}")
+  sortOrder    Int              @default(0)
   isRequired   Boolean          @default(false)
   minSelection Int              @default(0)
   maxSelection Int              @default(1)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
-  options      ModifierOption[]
+  options           ModifierOption[]
+  cartItemModifiers CartItemModifier[]
 
   @@index([productId])
+  @@index([type])
 }
 
 model ModifierOption {
@@ -193,9 +212,10 @@ model ModifierOption {
   modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
   name            String
   priceDelta      Decimal       @default(0) @db.Decimal(10, 2)
-  isDefault       Boolean            @default(false)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  isDefault       Boolean       @default(false)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   cartItemModifiers CartItemModifier[]
 

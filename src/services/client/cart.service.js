@@ -27,15 +27,40 @@ const roundMoney = (val) => {
  * @param {object} params
  * @param {string} params.productId
  * @param {string|null} [params.variantId=null]
- * @param {string[]} [params.modifierOptionIds=[]]
- * @returns {string}
  */
-export const generateConfigHash = ({ productId, variantId = null, modifierOptionIds = [] }) => {
-  const sortedModifiers = [...(modifierOptionIds || [])].sort();
+export const generateConfigHash = ({
+  productId,
+  variantId = null,
+  modifierOptionIds = [],
+  modifiers = [],
+}) => {
+  const combined = [];
+  if (Array.isArray(modifierOptionIds)) {
+    for (const optId of modifierOptionIds) {
+      if (optId) combined.push({ optionId: optId, text: '' });
+    }
+  }
+  if (Array.isArray(modifiers)) {
+    for (const m of modifiers) {
+      if (m) {
+        combined.push({
+          groupId: m.modifierGroupId || '',
+          optionId: m.modifierOptionId || '',
+          text: m.textValue ? String(m.textValue).trim() : '',
+        });
+      }
+    }
+  }
+  combined.sort((a, b) =>
+    (a.groupId || '').localeCompare(b.groupId || '') ||
+    (a.optionId || '').localeCompare(b.optionId || '') ||
+    (a.text || '').localeCompare(b.text || '')
+  );
+
   const payload = JSON.stringify({
     productId,
     variantId: variantId || null,
-    modifiers: sortedModifiers,
+    modifiers: combined,
   });
   return crypto.createHash('sha256').update(payload).digest('hex');
 };
@@ -202,6 +227,7 @@ export const validateProductConfiguration = async ({
   productId,
   variantId = null,
   modifierOptionIds = [],
+  modifiers = [],
   quantity = 1,
 }) => {
   const product = await prisma.product.findUnique({
@@ -221,12 +247,16 @@ export const validateProductConfiguration = async ({
         },
       },
       modifierGroups: {
+        orderBy: { sortOrder: 'asc' },
         include: {
           options: {
+            orderBy: { sortOrder: 'asc' },
             select: {
               id: true,
               name: true,
               priceDelta: true,
+              isDefault: true,
+              sortOrder: true,
             },
           },
         },
@@ -268,57 +298,188 @@ export const validateProductConfiguration = async ({
     );
   }
 
-  // Modifier validation & pricing
-  const validatedModifiers = [];
-  let modifierTotal = 0;
+  // Combine & normalize modifier inputs
+  const normalizedInputs = [];
+  if (Array.isArray(modifierOptionIds)) {
+    for (const optId of modifierOptionIds) {
+      if (optId) normalizedInputs.push({ modifierOptionId: optId });
+    }
+  }
+  if (Array.isArray(modifiers)) {
+    for (const m of modifiers) {
+      if (m) normalizedInputs.push(m);
+    }
+  }
 
-  if (modifierOptionIds && modifierOptionIds.length > 0) {
-    const allProductOptions = new Map();
-    const groupOptionCount = new Map();
+  const allProductOptions = new Map();
+  for (const group of product.modifierGroups) {
+    for (const opt of group.options) {
+      allProductOptions.set(opt.id, {
+        ...opt,
+        groupId: group.id,
+        groupName: group.name,
+        groupDisplayName: group.displayName || group.name,
+        groupType: group.type,
+      });
+    }
+  }
 
-    for (const group of product.modifierGroups) {
-      for (const opt of group.options) {
-        allProductOptions.set(opt.id, { ...opt, groupId: group.id, groupName: group.name });
+  // Group tracking
+  const groupSelectionCount = new Map();
+  const groupInputs = new Map();
+  for (const input of normalizedInputs) {
+    let grpId = input.modifierGroupId;
+    if (!grpId && input.modifierOptionId) {
+      const opt = allProductOptions.get(input.modifierOptionId);
+      if (opt) grpId = opt.groupId;
+    }
+    if (grpId) {
+      groupSelectionCount.set(grpId, (groupSelectionCount.get(grpId) || 0) + 1);
+      const list = groupInputs.get(grpId) || [];
+      list.push(input);
+      groupInputs.set(grpId, list);
+    }
+  }
+
+  // Enforce group constraints
+  for (const group of product.modifierGroups) {
+    const count = groupSelectionCount.get(group.id) || 0;
+    const inputsForGroup = groupInputs.get(group.id) || [];
+    const isTextLike = ['SHORT_TEXT', 'MULTI_LINE_TEXT', 'NUMBERS_ONLY_TEXT', 'DATE', 'FILE_UPLOAD'].includes(group.type);
+
+    if (group.isRequired) {
+      if (isTextLike) {
+        const hasText = inputsForGroup.some((inp) => inp.textValue && String(inp.textValue).trim().length > 0);
+        if (!hasText) {
+          throw new AppError(
+            `Modifier "${group.name}" is required. Please provide a value.`,
+            HTTP_STATUS.BAD_REQUEST,
+            'REQUIRED_MODIFIER_MISSING'
+          );
+        }
+      } else {
+        const requiredMin = Math.max(1, group.minSelection);
+        if (count < requiredMin) {
+          throw new AppError(
+            `Modifier "${group.name}" is required. Please select at least ${requiredMin} option(s).`,
+            HTTP_STATUS.BAD_REQUEST,
+            'REQUIRED_MODIFIER_MISSING'
+          );
+        }
       }
     }
 
-    for (const optId of modifierOptionIds) {
-      const option = allProductOptions.get(optId);
+    if (group.minSelection > 0 && count > 0 && count < group.minSelection) {
+      throw new AppError(
+        `Too few options selected for modifier "${group.name}". Minimum required: ${group.minSelection}`,
+        HTTP_STATUS.BAD_REQUEST,
+        'INVALID_MODIFIER_SELECTION'
+      );
+    }
+
+    if (group.maxSelection > 0 && count > group.maxSelection) {
+      throw new AppError(
+        `Too many options selected for modifier "${group.name}". Maximum allowed: ${group.maxSelection}`,
+        HTTP_STATUS.BAD_REQUEST,
+        'INVALID_MODIFIER_SELECTION'
+      );
+    }
+  }
+
+  // Build validated modifiers and compute modifier total
+  const validatedModifiers = [];
+  let modifierTotal = 0;
+
+  for (const input of normalizedInputs) {
+    if (input.modifierOptionId) {
+      const option = allProductOptions.get(input.modifierOptionId);
       if (!option) {
         throw new AppError(
-          `Modifier option ${optId} does not belong to this product`,
+          `Modifier option ${input.modifierOptionId} does not belong to this product`,
           HTTP_STATUS.BAD_REQUEST,
           'INVALID_MODIFIER'
         );
       }
 
-      const count = (groupOptionCount.get(option.groupId) || 0) + 1;
-      groupOptionCount.set(option.groupId, count);
-
-      const delta = roundMoney(option.priceDelta);
+      const delta = roundMoney(Number(option.priceDelta));
       modifierTotal += delta;
       validatedModifiers.push({
+        modifierGroupId: option.groupId,
         modifierOptionId: option.id,
-        priceDelta: delta,
-        name: option.name,
         groupName: option.groupName,
+        groupDisplayName: option.groupDisplayName,
+        type: option.groupType,
+        name: option.name,
+        priceDelta: delta,
+        textValue: input.textValue ? String(input.textValue).trim() : null,
       });
-    }
-
-    // Verify group maxSelection constraints
-    for (const group of product.modifierGroups) {
-      const count = groupOptionCount.get(group.id) || 0;
-      if (count > group.maxSelection) {
+    } else if (input.modifierGroupId) {
+      const group = product.modifierGroups.find((g) => g.id === input.modifierGroupId);
+      if (!group) {
         throw new AppError(
-          `Too many options selected for modifier group "${group.name}". Max allowed: ${group.maxSelection}`,
+          `Modifier group ${input.modifierGroupId} does not belong to this product`,
           HTTP_STATUS.BAD_REQUEST,
-          'INVALID_MODIFIER_SELECTION'
+          'INVALID_MODIFIER'
         );
       }
+
+      const text = input.textValue ? String(input.textValue).trim() : null;
+      const cfg = (typeof group.config === 'object' && group.config !== null) ? group.config : {};
+      if (text) {
+        if (cfg.maxLength && text.length > Number(cfg.maxLength)) {
+          throw new AppError(
+            `Value for "${group.name}" exceeds maximum length of ${cfg.maxLength} characters`,
+            HTTP_STATUS.BAD_REQUEST,
+            'MODIFIER_TEXT_TOO_LONG'
+          );
+        }
+        if (cfg.minLength && text.length < Number(cfg.minLength)) {
+          throw new AppError(
+            `Value for "${group.name}" must be at least ${cfg.minLength} characters`,
+            HTTP_STATUS.BAD_REQUEST,
+            'MODIFIER_TEXT_TOO_SHORT'
+          );
+        }
+        if (group.type === 'NUMBERS_ONLY_TEXT') {
+          const num = Number(text);
+          if (isNaN(num)) {
+            throw new AppError(
+              `Value for "${group.name}" must be a number`,
+              HTTP_STATUS.BAD_REQUEST,
+              'INVALID_MODIFIER_NUMBER'
+            );
+          }
+          if (cfg.minValue !== undefined && num < Number(cfg.minValue)) {
+            throw new AppError(
+              `Value for "${group.name}" must be >= ${cfg.minValue}`,
+              HTTP_STATUS.BAD_REQUEST,
+              'MODIFIER_NUMBER_OUT_OF_RANGE'
+            );
+          }
+          if (cfg.maxValue !== undefined && num > Number(cfg.maxValue)) {
+            throw new AppError(
+              `Value for "${group.name}" must be <= ${cfg.maxValue}`,
+              HTTP_STATUS.BAD_REQUEST,
+              'MODIFIER_NUMBER_OUT_OF_RANGE'
+            );
+          }
+        }
+      }
+
+      validatedModifiers.push({
+        modifierGroupId: group.id,
+        modifierOptionId: null,
+        groupName: group.name,
+        groupDisplayName: group.displayName || group.name,
+        type: group.type,
+        name: group.displayName || group.name,
+        priceDelta: 0,
+        textValue: text,
+      });
     }
   }
 
-  // Authoritative base pricing
+  // Authoritative base pricing (variant price overrides product price)
   const regular = selectedVariant ? (selectedVariant.regularPrice ?? product.regularPrice) : product.regularPrice;
   const sale = selectedVariant ? (selectedVariant.salePrice ?? product.salePrice) : product.salePrice;
   const offer = selectedVariant ? (selectedVariant.offerPrice ?? product.offerPrice) : product.offerPrice;
@@ -409,13 +570,16 @@ export const getFormattedCartById = async (cartId) => {
           },
           modifiers: {
             include: {
+              modifierGroup: {
+                select: { id: true, name: true, displayName: true, type: true },
+              },
               modifierOption: {
                 select: {
                   id: true,
                   name: true,
                   priceDelta: true,
                   modifierGroup: {
-                    select: { id: true, name: true },
+                    select: { id: true, name: true, displayName: true, type: true },
                   },
                 },
               },
@@ -468,12 +632,20 @@ export const getFormattedCartById = async (cartId) => {
     })) || [];
 
     // Format selected modifiers
-    const selectedModifiers = item.modifiers.map((m) => ({
-      id: m.modifierOption.id,
-      name: m.modifierOption.name,
-      groupName: m.modifierOption.modifierGroup?.name || '',
-      priceDelta: roundMoney(m.priceDelta),
-    }));
+    const selectedModifiers = item.modifiers.map((m) => {
+      const group = m.modifierGroup || m.modifierOption?.modifierGroup;
+      return {
+        id: m.id,
+        modifierGroupId: m.modifierGroupId || group?.id || null,
+        groupName: group?.name || '',
+        groupDisplayName: group?.displayName || group?.name || '',
+        type: group?.type || 'DROPDOWN',
+        modifierOptionId: m.modifierOptionId || null,
+        name: m.modifierOption?.name || group?.displayName || group?.name || '',
+        textValue: m.textValue || null,
+        priceDelta: roundMoney(m.priceDelta),
+      };
+    });
 
     return {
       id: item.id,
@@ -597,7 +769,14 @@ export const getCartDetails = async ({ userId = null, guestToken = null, cartId 
  * @returns {Promise<object>}
  */
 export const addItemToCart = async (context, input) => {
-  const { productId, variantId = null, quantity = 1, modifierOptionIds = [], metafields = [] } = input;
+  const {
+    productId,
+    variantId = null,
+    quantity = 1,
+    modifierOptionIds = [],
+    modifiers = [],
+    metafields = [],
+  } = input;
 
   const { cart, guestToken } = await resolveCart({
     userId: context.userId,
@@ -621,6 +800,7 @@ export const addItemToCart = async (context, input) => {
     productId,
     variantId,
     modifierOptionIds,
+    modifiers,
     quantity,
   });
 
@@ -628,6 +808,7 @@ export const addItemToCart = async (context, input) => {
     productId,
     variantId,
     modifierOptionIds,
+    modifiers,
   });
 
   // Transaction for atomic addition and concurrency safety
@@ -698,7 +879,9 @@ export const addItemToCart = async (context, input) => {
         await tx.cartItemModifier.createMany({
           data: config.validatedModifiers.map((mod) => ({
             cartItemId: createdItem.id,
-            modifierOptionId: mod.modifierOptionId,
+            modifierGroupId: mod.modifierGroupId || null,
+            modifierOptionId: mod.modifierOptionId || null,
+            textValue: mod.textValue || null,
             priceDelta: mod.priceDelta,
           })),
         });
@@ -741,23 +924,29 @@ export const updateCartItem = async (context, itemId, input) => {
   }
 
   const targetQuantity = input.quantity !== undefined ? input.quantity : item.quantity;
-  const targetModifierIds =
-    input.modifierOptionIds !== undefined
-      ? input.modifierOptionIds
-      : item.modifiers.map((m) => m.modifierOptionId);
+  const targetModifiers =
+    input.modifiers !== undefined
+      ? input.modifiers
+      : input.modifierOptionIds !== undefined
+      ? input.modifierOptionIds.map((optId) => ({ modifierOptionId: optId }))
+      : item.modifiers.map((m) => ({
+          modifierGroupId: m.modifierGroupId,
+          modifierOptionId: m.modifierOptionId,
+          textValue: m.textValue,
+        }));
 
   // Validate configuration & check stock
   const config = await validateProductConfiguration({
     productId: item.productId,
     variantId: item.variantId,
-    modifierOptionIds: targetModifierIds,
+    modifiers: targetModifiers,
     quantity: targetQuantity,
   });
 
   const newConfigHash = generateConfigHash({
     productId: item.productId,
     variantId: item.variantId,
-    modifierOptionIds: targetModifierIds,
+    modifiers: targetModifiers,
   });
 
   await prisma.$transaction(async (tx) => {
@@ -810,7 +999,9 @@ export const updateCartItem = async (context, itemId, input) => {
         await tx.cartItemModifier.createMany({
           data: config.validatedModifiers.map((mod) => ({
             cartItemId: item.id,
-            modifierOptionId: mod.modifierOptionId,
+            modifierGroupId: mod.modifierGroupId || null,
+            modifierOptionId: mod.modifierOptionId || null,
+            textValue: mod.textValue || null,
             priceDelta: mod.priceDelta,
           })),
         });

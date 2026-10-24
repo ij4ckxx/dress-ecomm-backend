@@ -7,6 +7,13 @@ import {
   deleteProductService,
   addProductImageService,
   deleteProductImageService,
+  getModifierGroupsService,
+  createModifierGroupService,
+  updateModifierGroupService,
+  deleteModifierGroupService,
+  createModifierOptionService,
+  updateModifierOptionService,
+  deleteModifierOptionService,
 } from '../../services/admin/product.service.js';
 import { uploadImageToCloudinary } from '../../utils/cloudinary.js';
 import { sendSuccess, sendError } from '../../utils/apiResponse.js';
@@ -72,6 +79,14 @@ export const createProduct = async (req, res, next) => {
         payload.images = JSON.parse(payload.images);
       } catch {
         payload.images = [];
+      }
+    }
+
+    if (typeof payload.modifierGroups === 'string') {
+      try {
+        payload.modifierGroups = JSON.parse(payload.modifierGroups);
+      } catch {
+        payload.modifierGroups = [];
       }
     }
 
@@ -148,6 +163,14 @@ export const updateProduct = async (req, res, next) => {
         payload.images = JSON.parse(payload.images);
       } catch {
         delete payload.images;
+      }
+    }
+
+    if (typeof payload.modifierGroups === 'string') {
+      try {
+        payload.modifierGroups = JSON.parse(payload.modifierGroups);
+      } catch {
+        delete payload.modifierGroups;
       }
     }
 
@@ -325,3 +348,130 @@ export const deleteProductImage = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * List all modifier groups and options for a product
+ * GET /api/v1/admin/products/:id/modifiers
+ */
+export const getModifiers = async (req, res, next) => {
+  try {
+    const modifierGroups = await getModifierGroupsService(req.params.id);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Modifier groups fetched successfully',
+      data: { modifierGroups },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create a new modifier group for a product
+ * POST /api/v1/admin/products/:id/modifiers
+ */
+export const createModifierGroup = async (req, res, next) => {
+  try {
+    const modifierGroup = await createModifierGroupService(req.params.id, req.body);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.CREATED,
+      message: 'Modifier group created successfully',
+      data: { modifierGroup },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update a modifier group
+ * PUT /api/v1/admin/products/:id/modifiers/:groupId
+ */
+export const updateModifierGroup = async (req, res, next) => {
+  try {
+    const modifierGroup = await updateModifierGroupService(req.params.id, req.params.groupId, req.body);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Modifier group updated successfully',
+      data: { modifierGroup },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a modifier group
+ * DELETE /api/v1/admin/products/:id/modifiers/:groupId
+ */
+export const deleteModifierGroup = async (req, res, next) => {
+  try {
+    const result = await deleteModifierGroupService(req.params.id, req.params.groupId);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Modifier group deleted successfully',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create an option under a modifier group
+ * POST /api/v1/admin/products/:id/modifiers/:groupId/options
+ */
+export const createModifierOption = async (req, res, next) => {
+  try {
+    const option = await createModifierOptionService(req.params.id, req.params.groupId, req.body);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.CREATED,
+      message: 'Modifier option created successfully',
+      data: { option },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update a modifier option
+ * PUT /api/v1/admin/products/:id/modifiers/:groupId/options/:optionId
+ */
+export const updateModifierOption = async (req, res, next) => {
+  try {
+    const option = await updateModifierOptionService(req.params.id, req.params.groupId, req.params.optionId, req.body);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Modifier option updated successfully',
+      data: { option },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a modifier option
+ * DELETE /api/v1/admin/products/:id/modifiers/:groupId/options/:optionId
+ */
+export const deleteModifierOption = async (req, res, next) => {
+  try {
+    const result = await deleteModifierOptionService(req.params.id, req.params.groupId, req.params.optionId);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Modifier option deleted successfully',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

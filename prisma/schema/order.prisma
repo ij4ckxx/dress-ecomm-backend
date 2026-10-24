@@ -87,6 +87,7 @@ model OrderItem {
   price      Decimal         @db.Decimal(10, 2)
   quantity   Int
   totalPrice Decimal         @db.Decimal(10, 2)
+  modifiers  Json?           @default("[]")
   createdAt  DateTime        @default(now())
 
   @@index([orderId])

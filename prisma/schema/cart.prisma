@@ -58,16 +58,19 @@ model CartItem {
 }
 
 model CartItemModifier {
-  id               String         @id @default(uuid())
+  id               String          @id @default(uuid())
   cartItemId       String
-  cartItem         CartItem       @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
-  modifierOptionId String
-  modifierOption   ModifierOption @relation(fields: [modifierOptionId], references: [id], onDelete: Restrict)
-  priceDelta       Decimal        @default(0) @db.Decimal(10, 2)
-  createdAt        DateTime       @default(now())
+  cartItem         CartItem        @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  modifierGroupId  String?
+  modifierGroup    ModifierGroup?  @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  modifierOptionId String?
+  modifierOption   ModifierOption? @relation(fields: [modifierOptionId], references: [id], onDelete: Cascade)
+  textValue        String?
+  priceDelta       Decimal         @default(0) @db.Decimal(10, 2)
+  createdAt        DateTime        @default(now())
 
-  @@unique([cartItemId, modifierOptionId])
   @@index([cartItemId])
+  @@index([modifierGroupId])
   @@index([modifierOptionId])
 }
 

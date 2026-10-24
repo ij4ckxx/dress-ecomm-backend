@@ -8,6 +8,13 @@ import {
   deleteProduct,
   uploadProductImages,
   deleteProductImage,
+  getModifiers,
+  createModifierGroup,
+  updateModifierGroup,
+  deleteModifierGroup,
+  createModifierOption,
+  updateModifierOption,
+  deleteModifierOption,
 } from '../../controllers/admin/product.controller.js';
 import { authenticate, requireAdmin, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
@@ -23,6 +30,12 @@ import {
   productParamIdSchema,
   productImageParamSchema,
   uploadProductImageBodySchema,
+  productModifierParamSchema,
+  productModifierOptionParamSchema,
+  createModifierGroupSchema,
+  updateModifierGroupSchema,
+  createModifierOptionSchema,
+  updateModifierOptionSchema,
 } from '../../validators/admin/product.validator.js';
 
 const router = Router();
@@ -66,7 +79,7 @@ router.post(
   adminLimiter,
   requirePermission(PERMISSIONS.PRODUCTS_WRITE),
   uploadMultipleImages,
-  parseFormDataJsonFields(['variants', 'images']),
+  parseFormDataJsonFields(['variants', 'images', 'modifierGroups']),
   validateImageExclusivity({ fileFields: ['images', 'files'], urlField: 'images', isMultiple: true }),
   validate(createAdminProductSchema),
   createProduct
@@ -83,7 +96,7 @@ router.put(
   requirePermission(PERMISSIONS.PRODUCTS_WRITE),
   validateParams(productParamIdSchema),
   uploadMultipleImages,
-  parseFormDataJsonFields(['variants', 'images']),
+  parseFormDataJsonFields(['variants', 'images', 'modifierGroups']),
   validateImageExclusivity({ fileFields: ['images', 'files'], urlField: 'images', isMultiple: true }),
   validate(updateAdminProductSchema),
   updateProduct
@@ -143,6 +156,101 @@ router.delete(
   requirePermission(PERMISSIONS.PRODUCTS_DELETE),
   validateParams(productImageParamSchema),
   deleteProductImage
+);
+
+/**
+ * @route   GET /api/v1/admin/products/:id/modifiers
+ * @desc    List all modifier groups and options for a product
+ * @access  Private (Admin with products:read)
+ */
+router.get(
+  '/:id/modifiers',
+  adminLimiter,
+  requirePermission(PERMISSIONS.PRODUCTS_READ),
+  validateParams(productParamIdSchema),
+  getModifiers
+);
+
+/**
+ * @route   POST /api/v1/admin/products/:id/modifiers
+ * @desc    Create a new modifier group for a product
+ * @access  Private (Admin with products:write)
+ */
+router.post(
+  '/:id/modifiers',
+  adminLimiter,
+  requirePermission(PERMISSIONS.PRODUCTS_WRITE),
+  validateParams(productParamIdSchema),
+  validate(createModifierGroupSchema),
+  createModifierGroup
+);
+
+/**
+ * @route   PUT /api/v1/admin/products/:id/modifiers/:groupId
+ * @desc    Update a modifier group
+ * @access  Private (Admin with products:write)
+ */
+router.put(
+  '/:id/modifiers/:groupId',
+  adminLimiter,
+  requirePermission(PERMISSIONS.PRODUCTS_WRITE),
+  validateParams(productModifierParamSchema),
+  validate(updateModifierGroupSchema),
+  updateModifierGroup
+);
+
+/**
+ * @route   DELETE /api/v1/admin/products/:id/modifiers/:groupId
+ * @desc    Delete a modifier group and all its options
+ * @access  Private (Admin with products:delete)
+ */
+router.delete(
+  '/:id/modifiers/:groupId',
+  adminLimiter,
+  requirePermission(PERMISSIONS.PRODUCTS_DELETE),
+  validateParams(productModifierParamSchema),
+  deleteModifierGroup
+);
+
+/**
+ * @route   POST /api/v1/admin/products/:id/modifiers/:groupId/options
+ * @desc    Add an option to a modifier group
+ * @access  Private (Admin with products:write)
+ */
+router.post(
+  '/:id/modifiers/:groupId/options',
+  adminLimiter,
+  requirePermission(PERMISSIONS.PRODUCTS_WRITE),
+  validateParams(productModifierParamSchema),
+  validate(createModifierOptionSchema),
+  createModifierOption
+);
+
+/**
+ * @route   PUT /api/v1/admin/products/:id/modifiers/:groupId/options/:optionId
+ * @desc    Update a modifier option
+ * @access  Private (Admin with products:write)
+ */
+router.put(
+  '/:id/modifiers/:groupId/options/:optionId',
+  adminLimiter,
+  requirePermission(PERMISSIONS.PRODUCTS_WRITE),
+  validateParams(productModifierOptionParamSchema),
+  validate(updateModifierOptionSchema),
+  updateModifierOption
+);
+
+/**
+ * @route   DELETE /api/v1/admin/products/:id/modifiers/:groupId/options/:optionId
+ * @desc    Delete a modifier option
+ * @access  Private (Admin with products:delete)
+ */
+router.delete(
+  '/:id/modifiers/:groupId/options/:optionId',
+  adminLimiter,
+  requirePermission(PERMISSIONS.PRODUCTS_DELETE),
+  validateParams(productModifierOptionParamSchema),
+  deleteModifierOption
 );
 
 export default router;

@@ -65,6 +65,7 @@ export const getCustomerOrdersService = async ({ userId, query }) => {
             price: true,
             totalPrice: true,
             imageUrl: true,
+            modifiers: true,
           },
         },
       },
@@ -86,6 +87,7 @@ export const getCustomerOrdersService = async ({ userId, query }) => {
       ...item,
       price: toNumber(item.price),
       totalPrice: toNumber(item.totalPrice),
+      modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
     })),
     courierPartner: order.courierPartner || null,
     trackingNumber: order.trackingNumber || null,
@@ -202,6 +204,7 @@ export const getCustomerOrderByNumberService = async ({ userId, orderNumber }) =
       price: toNumber(item.price),
       quantity: item.quantity,
       totalPrice: toNumber(item.totalPrice),
+      modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
       productSlug: item.product?.slug || null,
     })),
     payments: order.payments.map((p) => ({
@@ -439,12 +442,21 @@ export const customerReorderService = async ({ userId, orderNumber }) => {
 
       const quantityToAdd = Math.min(item.quantity, availableStock);
 
+      const itemModifiers = Array.isArray(item.modifiers)
+        ? item.modifiers.map((m) => ({
+            modifierGroupId: m.modifierGroupId || undefined,
+            modifierOptionId: m.modifierOptionId || undefined,
+            textValue: m.textValue || undefined,
+          }))
+        : undefined;
+
       await addItemToCart(
         { userId },
         {
           productId: item.productId,
           variantId: item.variantId,
           quantity: quantityToAdd,
+          modifiers: itemModifiers && itemModifiers.length > 0 ? itemModifiers : undefined,
         }
       );
 
@@ -577,6 +589,7 @@ export const trackOrderService = async ({ orderNumber, email, phone, emailOrPhon
       price: toNumber(item.price),
       quantity: item.quantity,
       totalPrice: toNumber(item.totalPrice),
+      modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
       productSlug: item.product?.slug || null,
     })),
     customer: isOwner

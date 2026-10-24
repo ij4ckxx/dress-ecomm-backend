@@ -9,6 +9,17 @@ export const productImageParamSchema = z.object({
   imageId: z.string().uuid('Invalid Image ID'),
 });
 
+export const productModifierParamSchema = z.object({
+  id: z.string().uuid('Invalid Product ID'),
+  groupId: z.string().uuid('Invalid Modifier Group ID'),
+});
+
+export const productModifierOptionParamSchema = z.object({
+  id: z.string().uuid('Invalid Product ID'),
+  groupId: z.string().uuid('Invalid Modifier Group ID'),
+  optionId: z.string().uuid('Invalid Modifier Option ID'),
+});
+
 const coerceBoolean = (defaultVal) =>
   z.preprocess((v) => {
     if (typeof v === 'string') {
@@ -17,6 +28,60 @@ const coerceBoolean = (defaultVal) =>
     }
     return v;
   }, defaultVal !== undefined ? z.boolean().default(defaultVal) : z.boolean().optional());
+
+export const modifierTypeEnum = z.enum([
+  'DROPDOWN',
+  'RADIO_BUTTONS',
+  'RECTANGLE_LIST',
+  'CHECKBOX',
+  'SHORT_TEXT',
+  'MULTI_LINE_TEXT',
+  'NUMBERS_ONLY_TEXT',
+  'DATE',
+  'FILE_UPLOAD',
+]);
+
+export const modifierOptionInputSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, 'Option name is required').max(100),
+  priceDelta: z.coerce.number().default(0),
+  isDefault: coerceBoolean(false),
+  sortOrder: z.coerce.number().int().default(0),
+});
+
+export const modifierGroupInputSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, 'Modifier group name is required').max(100),
+  displayName: z.string().trim().max(100).optional().nullable(),
+  type: modifierTypeEnum.default('DROPDOWN'),
+  defaultValue: z.string().trim().max(255).optional().nullable(),
+  config: z.record(z.any()).optional().nullable().default({}),
+  isRequired: coerceBoolean(false),
+  minSelection: z.coerce.number().int().min(0).default(0),
+  maxSelection: z.coerce.number().int().min(1).default(1),
+  sortOrder: z.coerce.number().int().default(0),
+  options: z.array(modifierOptionInputSchema).optional().default([]),
+});
+
+const coerceModifierGroupsArray = z.preprocess((v) => {
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+  return v;
+}, z.array(modifierGroupInputSchema).optional().default([]));
+
+export const createModifierGroupSchema = modifierGroupInputSchema.omit({ id: true });
+export const updateModifierGroupSchema = modifierGroupInputSchema.partial();
+export const createModifierOptionSchema = modifierOptionInputSchema.omit({ id: true });
+export const updateModifierOptionSchema = modifierOptionInputSchema.partial();
 
 const variantInputSchema = z.object({
   id: z.string().uuid().optional(),
@@ -112,6 +177,7 @@ export const createAdminProductSchema = z.object({
   isFeatured: coerceBoolean(false),
   images: coerceImagesArray,
   variants: coerceVariantsArray,
+  modifierGroups: coerceModifierGroupsArray,
 });
 
 export const updateAdminProductSchema = z.object({
@@ -136,6 +202,7 @@ export const updateAdminProductSchema = z.object({
   isFeatured: coerceBoolean(),
   images: coerceImagesArray,
   variants: coerceVariantsArray,
+  modifierGroups: coerceModifierGroupsArray,
 });
 
 export const uploadProductImageBodySchema = z.object({

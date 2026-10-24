@@ -259,6 +259,14 @@ export const getProductByIdService = async (id) => {
           },
         },
       },
+      modifierGroups: {
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          options: {
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      },
     },
   });
 
@@ -302,6 +310,26 @@ export const getProductByIdService = async (id) => {
       })),
       createdAt: v.createdAt,
     })),
+    modifierGroups: product.modifierGroups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      displayName: g.displayName || null,
+      type: g.type,
+      defaultValue: g.defaultValue || null,
+      config: g.config || {},
+      isRequired: g.isRequired,
+      minSelection: g.minSelection,
+      maxSelection: g.maxSelection,
+      sortOrder: g.sortOrder,
+      options: g.options.map((opt) => ({
+        id: opt.id,
+        name: opt.name,
+        priceDelta: Number(opt.priceDelta),
+        isDefault: opt.isDefault,
+        sortOrder: opt.sortOrder,
+      })),
+      createdAt: g.createdAt,
+    })),
     collections: product.collections.map((c) => c.collection),
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
@@ -328,6 +356,7 @@ export const createProductService = async (data) => {
     isFeatured = false,
     images = [],
     variants = [],
+    modifierGroups = [],
   } = data;
 
   // 1. Verify Category exists
@@ -454,6 +483,38 @@ export const createProductService = async (data) => {
       }
     }
 
+    // D. Create Modifier Groups and Options
+    if (modifierGroups && modifierGroups.length > 0) {
+      for (const group of modifierGroups) {
+        const createdGroup = await tx.modifierGroup.create({
+          data: {
+            productId: newProduct.id,
+            name: group.name,
+            displayName: group.displayName || null,
+            type: group.type || 'DROPDOWN',
+            defaultValue: group.defaultValue || null,
+            config: group.config || {},
+            sortOrder: group.sortOrder || 0,
+            isRequired: group.isRequired ?? false,
+            minSelection: group.minSelection ?? 0,
+            maxSelection: group.maxSelection ?? 1,
+          },
+        });
+
+        if (group.options && group.options.length > 0) {
+          await tx.modifierOption.createMany({
+            data: group.options.map((opt, idx) => ({
+              modifierGroupId: createdGroup.id,
+              name: opt.name,
+              priceDelta: opt.priceDelta || 0,
+              isDefault: opt.isDefault ?? false,
+              sortOrder: opt.sortOrder ?? idx,
+            })),
+          });
+        }
+      }
+    }
+
     return newProduct;
   });
 
@@ -461,7 +522,7 @@ export const createProductService = async (data) => {
 };
 
 /**
- * Updates an existing product, recalculates stocks, and updates variants
+ * Updates an existing product, recalculates stocks, and updates variants & modifiers
  */
 export const updateProductService = async (id, data) => {
   const existing = await prisma.product.findUnique({
@@ -580,6 +641,81 @@ export const updateProductService = async (id, data) => {
       updatePayload.stockQuantity = allCurrentVariants.reduce((sum, v) => sum + v.stockQuantity, 0);
     } else if (data.stockQuantity !== undefined) {
       updatePayload.stockQuantity = data.stockQuantity;
+    }
+
+    // Handle Modifier Groups updates
+    if (data.modifierGroups && data.modifierGroups.length > 0) {
+      for (const group of data.modifierGroups) {
+        if (group.id) {
+          await tx.modifierGroup.update({
+            where: { id: group.id },
+            data: {
+              ...(group.name !== undefined && { name: group.name }),
+              ...(group.displayName !== undefined && { displayName: group.displayName }),
+              ...(group.type !== undefined && { type: group.type }),
+              ...(group.defaultValue !== undefined && { defaultValue: group.defaultValue }),
+              ...(group.config !== undefined && { config: group.config }),
+              ...(group.isRequired !== undefined && { isRequired: group.isRequired }),
+              ...(group.minSelection !== undefined && { minSelection: group.minSelection }),
+              ...(group.maxSelection !== undefined && { maxSelection: group.maxSelection }),
+              ...(group.sortOrder !== undefined && { sortOrder: group.sortOrder }),
+            },
+          });
+
+          if (group.options && group.options.length > 0) {
+            for (const opt of group.options) {
+              if (opt.id) {
+                await tx.modifierOption.update({
+                  where: { id: opt.id },
+                  data: {
+                    ...(opt.name !== undefined && { name: opt.name }),
+                    ...(opt.priceDelta !== undefined && { priceDelta: opt.priceDelta }),
+                    ...(opt.isDefault !== undefined && { isDefault: opt.isDefault }),
+                    ...(opt.sortOrder !== undefined && { sortOrder: opt.sortOrder }),
+                  },
+                });
+              } else {
+                await tx.modifierOption.create({
+                  data: {
+                    modifierGroupId: group.id,
+                    name: opt.name,
+                    priceDelta: opt.priceDelta || 0,
+                    isDefault: opt.isDefault ?? false,
+                    sortOrder: opt.sortOrder || 0,
+                  },
+                });
+              }
+            }
+          }
+        } else {
+          const createdGroup = await tx.modifierGroup.create({
+            data: {
+              productId: id,
+              name: group.name,
+              displayName: group.displayName || null,
+              type: group.type || 'DROPDOWN',
+              defaultValue: group.defaultValue || null,
+              config: group.config || {},
+              sortOrder: group.sortOrder || 0,
+              isRequired: group.isRequired ?? false,
+              minSelection: group.minSelection ?? 0,
+              maxSelection: group.maxSelection ?? 1,
+            },
+          });
+
+          if (group.options && group.options.length > 0) {
+            await tx.modifierOption.createMany({
+              data: group.options.map((opt, idx) => ({
+                modifierGroupId: createdGroup.id,
+                name: opt.name,
+                priceDelta: opt.priceDelta || 0,
+                isDefault: opt.isDefault ?? false,
+                sortOrder: opt.sortOrder ?? idx,
+              })),
+            });
+          }
+        }
+      }
     }
 
     // Execute product update
@@ -728,3 +864,314 @@ export const deleteProductImageService = async (productId, imageId) => {
     deleted: true,
   };
 };
+
+/**
+ * Retrieves all modifier groups and their options for a product
+ */
+export const getModifierGroupsService = async (productId) => {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { id: true, name: true },
+  });
+
+  if (!product) {
+    throw createServiceError('Product not found', HTTP_STATUS.NOT_FOUND, 'PRODUCT_NOT_FOUND');
+  }
+
+  const modifierGroups = await prisma.modifierGroup.findMany({
+    where: { productId },
+    orderBy: { sortOrder: 'asc' },
+    include: {
+      options: {
+        orderBy: { sortOrder: 'asc' },
+      },
+    },
+  });
+
+  return modifierGroups.map((g) => ({
+    id: g.id,
+    productId: g.productId,
+    name: g.name,
+    displayName: g.displayName || null,
+    type: g.type,
+    defaultValue: g.defaultValue || null,
+    config: g.config || {},
+    isRequired: g.isRequired,
+    minSelection: g.minSelection,
+    maxSelection: g.maxSelection,
+    sortOrder: g.sortOrder,
+    options: g.options.map((opt) => ({
+      id: opt.id,
+      name: opt.name,
+      priceDelta: Number(opt.priceDelta),
+      isDefault: opt.isDefault,
+      sortOrder: opt.sortOrder,
+      createdAt: opt.createdAt,
+      updatedAt: opt.updatedAt,
+    })),
+    createdAt: g.createdAt,
+    updatedAt: g.updatedAt,
+  }));
+};
+
+/**
+ * Creates a new modifier group under a product (with optional initial options)
+ */
+export const createModifierGroupService = async (productId, data) => {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { id: true },
+  });
+
+  if (!product) {
+    throw createServiceError('Product not found', HTTP_STATUS.NOT_FOUND, 'PRODUCT_NOT_FOUND');
+  }
+
+  const {
+    name,
+    displayName,
+    type = 'DROPDOWN',
+    defaultValue,
+    config = {},
+    isRequired = false,
+    minSelection = 0,
+    maxSelection = 1,
+    sortOrder = 0,
+    options = [],
+  } = data;
+
+  const group = await prisma.modifierGroup.create({
+    data: {
+      productId,
+      name,
+      displayName: displayName || null,
+      type,
+      defaultValue: defaultValue || null,
+      config: config || {},
+      isRequired,
+      minSelection,
+      maxSelection,
+      sortOrder,
+      options: options.length > 0 ? {
+        create: options.map((opt, idx) => ({
+          name: opt.name,
+          priceDelta: opt.priceDelta || 0,
+          isDefault: opt.isDefault ?? false,
+          sortOrder: opt.sortOrder ?? idx,
+        })),
+      } : undefined,
+    },
+    include: {
+      options: {
+        orderBy: { sortOrder: 'asc' },
+      },
+    },
+  });
+
+  return {
+    id: group.id,
+    productId: group.productId,
+    name: group.name,
+    displayName: group.displayName,
+    type: group.type,
+    defaultValue: group.defaultValue,
+    config: group.config,
+    isRequired: group.isRequired,
+    minSelection: group.minSelection,
+    maxSelection: group.maxSelection,
+    sortOrder: group.sortOrder,
+    options: group.options.map((opt) => ({
+      id: opt.id,
+      name: opt.name,
+      priceDelta: Number(opt.priceDelta),
+      isDefault: opt.isDefault,
+      sortOrder: opt.sortOrder,
+    })),
+    createdAt: group.createdAt,
+    updatedAt: group.updatedAt,
+  };
+};
+
+/**
+ * Updates a modifier group under a product
+ */
+export const updateModifierGroupService = async (productId, groupId, data) => {
+  const existing = await prisma.modifierGroup.findFirst({
+    where: { id: groupId, productId },
+  });
+
+  if (!existing) {
+    throw createServiceError('Modifier group not found on this product', HTTP_STATUS.NOT_FOUND, 'MODIFIER_GROUP_NOT_FOUND');
+  }
+
+  const updateData = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.displayName !== undefined) updateData.displayName = data.displayName;
+  if (data.type !== undefined) updateData.type = data.type;
+  if (data.defaultValue !== undefined) updateData.defaultValue = data.defaultValue;
+  if (data.config !== undefined) updateData.config = data.config;
+  if (data.isRequired !== undefined) updateData.isRequired = data.isRequired;
+  if (data.minSelection !== undefined) updateData.minSelection = data.minSelection;
+  if (data.maxSelection !== undefined) updateData.maxSelection = data.maxSelection;
+  if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
+
+  const updated = await prisma.modifierGroup.update({
+    where: { id: groupId },
+    data: updateData,
+    include: {
+      options: {
+        orderBy: { sortOrder: 'asc' },
+      },
+    },
+  });
+
+  return {
+    id: updated.id,
+    productId: updated.productId,
+    name: updated.name,
+    displayName: updated.displayName,
+    type: updated.type,
+    defaultValue: updated.defaultValue,
+    config: updated.config,
+    isRequired: updated.isRequired,
+    minSelection: updated.minSelection,
+    maxSelection: updated.maxSelection,
+    sortOrder: updated.sortOrder,
+    options: updated.options.map((opt) => ({
+      id: opt.id,
+      name: opt.name,
+      priceDelta: Number(opt.priceDelta),
+      isDefault: opt.isDefault,
+      sortOrder: opt.sortOrder,
+    })),
+    createdAt: updated.createdAt,
+    updatedAt: updated.updatedAt,
+  };
+};
+
+/**
+ * Deletes a modifier group and its options
+ */
+export const deleteModifierGroupService = async (productId, groupId) => {
+  const existing = await prisma.modifierGroup.findFirst({
+    where: { id: groupId, productId },
+  });
+
+  if (!existing) {
+    throw createServiceError('Modifier group not found on this product', HTTP_STATUS.NOT_FOUND, 'MODIFIER_GROUP_NOT_FOUND');
+  }
+
+  await prisma.modifierGroup.delete({
+    where: { id: groupId },
+  });
+
+  return {
+    productId,
+    groupId,
+    deleted: true,
+  };
+};
+
+/**
+ * Creates an option under a modifier group
+ */
+export const createModifierOptionService = async (productId, groupId, data) => {
+  const group = await prisma.modifierGroup.findFirst({
+    where: { id: groupId, productId },
+  });
+
+  if (!group) {
+    throw createServiceError('Modifier group not found on this product', HTTP_STATUS.NOT_FOUND, 'MODIFIER_GROUP_NOT_FOUND');
+  }
+
+  const { name, priceDelta = 0, isDefault = false, sortOrder = 0 } = data;
+
+  const option = await prisma.modifierOption.create({
+    data: {
+      modifierGroupId: groupId,
+      name,
+      priceDelta,
+      isDefault,
+      sortOrder,
+    },
+  });
+
+  return {
+    id: option.id,
+    modifierGroupId: option.modifierGroupId,
+    name: option.name,
+    priceDelta: Number(option.priceDelta),
+    isDefault: option.isDefault,
+    sortOrder: option.sortOrder,
+    createdAt: option.createdAt,
+    updatedAt: option.updatedAt,
+  };
+};
+
+/**
+ * Updates an option under a modifier group
+ */
+export const updateModifierOptionService = async (productId, groupId, optionId, data) => {
+  const option = await prisma.modifierOption.findFirst({
+    where: {
+      id: optionId,
+      modifierGroupId: groupId,
+      modifierGroup: { productId },
+    },
+  });
+
+  if (!option) {
+    throw createServiceError('Modifier option not found on this group', HTTP_STATUS.NOT_FOUND, 'MODIFIER_OPTION_NOT_FOUND');
+  }
+
+  const updateData = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.priceDelta !== undefined) updateData.priceDelta = data.priceDelta;
+  if (data.isDefault !== undefined) updateData.isDefault = data.isDefault;
+  if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
+
+  const updated = await prisma.modifierOption.update({
+    where: { id: optionId },
+    data: updateData,
+  });
+
+  return {
+    id: updated.id,
+    modifierGroupId: updated.modifierGroupId,
+    name: updated.name,
+    priceDelta: Number(updated.priceDelta),
+    isDefault: updated.isDefault,
+    sortOrder: updated.sortOrder,
+    createdAt: updated.createdAt,
+    updatedAt: updated.updatedAt,
+  };
+};
+
+/**
+ * Deletes an option from a modifier group
+ */
+export const deleteModifierOptionService = async (productId, groupId, optionId) => {
+  const option = await prisma.modifierOption.findFirst({
+    where: {
+      id: optionId,
+      modifierGroupId: groupId,
+      modifierGroup: { productId },
+    },
+  });
+
+  if (!option) {
+    throw createServiceError('Modifier option not found on this group', HTTP_STATUS.NOT_FOUND, 'MODIFIER_OPTION_NOT_FOUND');
+  }
+
+  await prisma.modifierOption.delete({
+    where: { id: optionId },
+  });
+
+  return {
+    productId,
+    groupId,
+    optionId,
+    deleted: true,
+  };
+};
+

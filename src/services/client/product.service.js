@@ -324,15 +324,16 @@ export const getProductBySlug = async (slug, userId = null) => {
         },
       },
       modifierGroups: {
-        orderBy: { createdAt: 'asc' },
+        orderBy: { sortOrder: 'asc' },
         include: {
           options: {
-            orderBy: { priceDelta: 'asc' },
+            orderBy: { sortOrder: 'asc' },
             select: {
               id: true,
               name: true,
               priceDelta: true,
               isDefault: true,
+              sortOrder: true,
             },
           },
         },
@@ -400,14 +401,20 @@ export const getProductBySlug = async (slug, userId = null) => {
   const modifierGroups = product.modifierGroups.map((group) => ({
     id: group.id,
     name: group.name,
+    displayName: group.displayName || group.name,
+    type: group.type,
+    defaultValue: group.defaultValue || null,
+    config: group.config || {},
     isRequired: group.isRequired,
     minSelection: group.minSelection,
     maxSelection: group.maxSelection,
+    sortOrder: group.sortOrder,
     options: group.options.map((opt) => ({
       id: opt.id,
       name: opt.name,
       priceDelta: typeof opt.priceDelta?.toNumber === 'function' ? opt.priceDelta.toNumber() : Number(opt.priceDelta),
       isDefault: opt.isDefault,
+      sortOrder: opt.sortOrder,
     })),
   }));
 

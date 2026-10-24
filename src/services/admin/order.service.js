@@ -107,6 +107,7 @@ export const getOrdersService = async ({ query }) => {
             price: true,
             totalPrice: true,
             imageUrl: true,
+            modifiers: true,
           },
         },
         payments: {
