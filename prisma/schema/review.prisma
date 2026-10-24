@@ -1,0 +1,64 @@
+model Review {
+  id                 String        @id @default(uuid())
+  productId          String
+  product            Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId            String?
+  order              Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  rating             Int           // 1 to 5 stars
+  title              String?       // Brief review headline
+  comment            String        // Detailed feedback text
+  fitFeedback        FitFeedback?  // Sizing / fit feedback (RUNS_SMALL, TRUE_TO_SIZE, RUNS_LARGE)
+  images             String[]      @default([]) // Image URLs (Cloudinary or direct URLs)
+
+  isVerifiedPurchase Boolean       @default(false)
+  status             ReviewStatus  @default(APPROVED) // Auto-approved by default; Admins can moderate/reject
+  helpfulCount       Int           @default(0)
+
+  // Admin / Store Owner Reply
+  adminReply         String?
+  adminReplyAt       DateTime?
+  repliedById        String?
+  repliedBy          User?         @relation("AdminReviewReplies", fields: [repliedById], references: [id], onDelete: SetNull)
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  votes              ReviewVote[]
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@index([userId])
+  @@index([status])
+  @@index([rating])
+  @@index([isVerifiedPurchase])
+  @@index([createdAt])
+}
+
+model ReviewVote {
+  id        String   @id @default(uuid())
+  reviewId  String
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([reviewId, userId])
+  @@index([reviewId])
+  @@index([userId])
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+enum FitFeedback {
+  RUNS_SMALL
+  TRUE_TO_SIZE
+  RUNS_LARGE
+}

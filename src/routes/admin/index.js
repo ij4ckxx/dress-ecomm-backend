@@ -12,6 +12,8 @@ import settingsRoutes from './settings.routes.js';
 import auditLogRoutes from './auditLog.routes.js';
 import analyticsRoutes from './analytics.routes.js';
 
+import reviewRoutes from './review.routes.js';
+
 const router = Router();
 
 // Mount Module 1: Admin User Hierarchy & Staff Management
@@ -42,5 +44,8 @@ router.use('/audit-logs', auditLogRoutes);
 
 // Mount Module 8: Performance Analytics & In-Memory Telemetry
 router.use('/analytics', analyticsRoutes);
+
+// Mount Module 9: Customer Reviews Moderation & Telemetry
+router.use('/reviews', reviewRoutes);
 
 export default router;

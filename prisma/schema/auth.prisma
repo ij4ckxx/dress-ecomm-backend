@@ -32,6 +32,9 @@ model User {
   couponUsages  CouponUsage[]
   storeConfigsUpdated StoreConfig[] @relation("ConfigUpdater")
   auditLogs     AuditLog[] @relation("AuditLogs")
+  reviews       Review[]
+  reviewVotes   ReviewVote[]
+  adminReviewReplies Review[] @relation("AdminReviewReplies")
 
   @@index([email])
   @@index([role])

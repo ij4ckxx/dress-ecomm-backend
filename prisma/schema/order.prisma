@@ -62,6 +62,7 @@ model Order {
   statusHistory      OrderStatusHistory[]
   couponUsages       CouponUsage[]
   metafields         Json?              @default("[]")
+  reviews            Review[]
 
   @@index([orderNumber])
   @@index([status])

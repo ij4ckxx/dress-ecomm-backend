@@ -60,6 +60,7 @@ model Product {
   collections           ProductCollection[]
   inventoryLogs         InventoryTransaction[]
   orderItems            OrderItem[]
+  reviews               Review[]
 
   @@index([slug])
   @@index([categoryId])

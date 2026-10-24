@@ -12,6 +12,7 @@ import paymentRoutes from './client/payment.routes.js';
 import clientOrderRoutes from './client/order.routes.js';
 import wishlistRoutes from './client/wishlist.routes.js';
 import contactRoutes from './client/contact.routes.js';
+import reviewRoutes from './client/review.routes.js';
 import adminRoutes from './admin/index.js';
 
 const router = Router();
@@ -46,6 +47,9 @@ router.use('/orders', clientOrderRoutes);
 // Mount Wishlist routes
 router.use('/wishlist', wishlistRoutes);
 router.use('/customer/wishlist', wishlistRoutes);
+
+// Mount Review routes
+router.use('/reviews', reviewRoutes);
 
 // Mount Admin routes (isolated under /admin)
 router.use('/admin', adminRoutes);

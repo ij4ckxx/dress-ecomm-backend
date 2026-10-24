@@ -14,6 +14,10 @@ import {
   updateAvatar,
   changePassword,
 } from '../../controllers/client/customer.controller.js';
+import {
+  getCustomerReviews,
+  getPendingReviewProducts,
+} from '../../controllers/client/review.controller.js';
 import addressRoutes from './address.routes.js';
 
 const router = Router();
@@ -71,5 +75,19 @@ router.post(
  */
 router.patch('/account/password', authenticate, validate(changePasswordSchema), changePassword);
 router.put('/account/password', authenticate, validate(changePasswordSchema), changePassword);
+
+/**
+ * @route   GET /api/v1/customer/reviews
+ * @desc    Get all reviews authored by the authenticated customer
+ * @access  Private (Authenticated Customer)
+ */
+router.get('/reviews', authenticate, getCustomerReviews);
+
+/**
+ * @route   GET /api/v1/customer/reviews/pending
+ * @desc    Get products purchased by customer that have not yet been reviewed
+ * @access  Private (Authenticated Customer)
+ */
+router.get('/reviews/pending', authenticate, getPendingReviewProducts);
 
 export default router;
