@@ -1,17 +1,26 @@
 import Redis from 'ioredis';
+import { ENV } from './env.js';
 
 let redisClient = null;
 let isConnected = false;
 
-const redisUrl = process.env.REDIS_URL;
+let redisUrl = ENV.REDIS_URL;
 
 if (redisUrl && redisUrl.trim()) {
   try {
-    redisClient = new Redis(redisUrl.trim(), {
+    let cleanUrl = redisUrl.trim();
+    const isUpstash = cleanUrl.includes('upstash.io');
+    if (isUpstash && cleanUrl.startsWith('redis://')) {
+      cleanUrl = cleanUrl.replace('redis://', 'rediss://');
+    }
+    const isTls = cleanUrl.startsWith('rediss://');
+
+    redisClient = new Redis(cleanUrl, {
       maxRetriesPerRequest: 1,
       enableReadyCheck: true,
       lazyConnect: false,
-      connectTimeout: 5000,
+      connectTimeout: 8000,
+      tls: isTls ? { rejectUnauthorized: false } : undefined,
       retryStrategy(times) {
         if (times > 5) {
           console.warn('⚠️ [REDIS] Max reconnect attempts reached. Falling back to high-speed in-memory cache.');
@@ -21,13 +30,18 @@ if (redisUrl && redisUrl.trim()) {
       },
     });
 
+    let hasLoggedReady = false;
+
     redisClient.on('connect', () => {
-      console.log('✅ [REDIS] Connected to Redis server successfully');
       isConnected = true;
     });
 
     redisClient.on('ready', () => {
       isConnected = true;
+      if (!hasLoggedReady) {
+        console.log('✅ [REDIS] Connected to Redis server successfully (Ready)');
+        hasLoggedReady = true;
+      }
     });
 
     redisClient.on('error', (err) => {

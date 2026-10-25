@@ -2,6 +2,7 @@ import prisma from '../../config/db.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { generateUniqueSlug } from '../../utils/slug.js';
 import { getDescendantCategoryIds } from '../client/category.service.js';
+import { purgeCache } from '../../utils/cache.js';
 
 const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code = 'ERROR') => {
   const error = new Error(message);
@@ -725,6 +726,8 @@ export const updateProductService = async (id, data) => {
     });
   });
 
+  await purgeCache('cache:product');
+
   return getProductByIdService(id);
 };
 
@@ -757,6 +760,8 @@ export const toggleProductStatusService = async (id, { isActive, isFeatured }) =
       updatedAt: true,
     },
   });
+
+  await purgeCache('cache:product');
 
   return updated;
 };
@@ -798,6 +803,8 @@ export const deleteProductService = async (id, { force = false } = {}) => {
   await prisma.product.delete({
     where: { id },
   });
+
+  await purgeCache('cache:product');
 
   return {
     id,

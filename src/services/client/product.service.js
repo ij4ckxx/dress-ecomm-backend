@@ -5,6 +5,7 @@ import { formatPrice } from '../../utils/pricing.js';
 import { parsePagination, formatPagination } from '../../utils/pagination.js';
 import { PRODUCT_SORT_OPTIONS } from '../../constants/sortOptions.js';
 import { getDescendantCategoryIds } from './category.service.js';
+import { getCache, setCache } from '../../utils/cache.js';
 
 const KNOWN_QUERY_KEYS = new Set([
   'page',
@@ -248,10 +249,14 @@ export const getProducts = async (query = {}, userId = null) => {
  * @returns {Promise<object>}
  */
 export const getProductBySlug = async (slug, userId = null) => {
-  const product = await prisma.product.findUnique({
-    where: { slug, isActive: true },
-    include: {
-      category: {
+  const cacheKey = `cache:product:slug:${slug}`;
+  let baseProduct = await getCache(cacheKey);
+
+  if (!baseProduct) {
+    const product = await prisma.product.findUnique({
+      where: { slug, isActive: true },
+      include: {
+        category: {
         select: {
           id: true,
           name: true,
@@ -341,25 +346,12 @@ export const getProductBySlug = async (slug, userId = null) => {
     },
   });
 
-  if (!product) {
-    throw new AppError('Product not found', HTTP_STATUS.NOT_FOUND, 'PRODUCT_NOT_FOUND');
-  }
+    if (!product) {
+      throw new AppError('Product not found', HTTP_STATUS.NOT_FOUND, 'PRODUCT_NOT_FOUND');
+    }
 
-  // Wishlist check
-  let isWishlisted = false;
-  if (userId) {
-    const wishlistItem = await prisma.wishlistItem.findFirst({
-      where: {
-        wishlist: { userId },
-        productId: product.id,
-      },
-      select: { id: true },
-    });
-    isWishlisted = Boolean(wishlistItem);
-  }
-
-  // Format base pricing
-  const basePrice = formatPrice(product.regularPrice, product.salePrice, product.offerPrice);
+    // Format base pricing
+    const basePrice = formatPrice(product.regularPrice, product.salePrice, product.offerPrice);
 
   // Format variants with variant-specific pricing
   const variants = product.variants.map((v) => {
@@ -418,33 +410,54 @@ export const getProductBySlug = async (slug, userId = null) => {
     })),
   }));
 
-  const hasVariants = variants.length > 0;
-  const hasModifiers = modifierGroups.length > 0;
-  const requiresConfiguration = hasVariants || hasModifiers;
+    const hasVariants = variants.length > 0;
+    const hasModifiers = modifierGroups.length > 0;
+    const requiresConfiguration = hasVariants || hasModifiers;
 
-  // In-stock status check
-  const inStock = product.stockQuantity > 0 || variants.some((v) => v.inStock);
+    // In-stock status check
+    const inStock = product.stockQuantity > 0 || variants.some((v) => v.inStock);
+
+    baseProduct = {
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      brand: product.brand,
+      sku: product.sku,
+      category: product.category,
+      price: basePrice,
+      stockQuantity: product.stockQuantity,
+      inStock,
+      rating: product.rating,
+      reviewCount: product.reviewCount,
+      hasVariants,
+      hasModifiers,
+      requiresConfiguration,
+      images: product.images,
+      variants,
+      attributes,
+      modifierGroups,
+    };
+
+    // Cache product details for 30 minutes (1800 seconds)
+    await setCache(cacheKey, baseProduct, 1800);
+  }
+
+  // Wishlist check (per user)
+  let isWishlisted = false;
+  if (userId && baseProduct?.id) {
+    const wishlistItem = await prisma.wishlistItem.findFirst({
+      where: {
+        wishlist: { userId },
+        productId: baseProduct.id,
+      },
+      select: { id: true },
+    });
+    isWishlisted = Boolean(wishlistItem);
+  }
 
   return {
-    id: product.id,
-    name: product.name,
-    slug: product.slug,
-    description: product.description,
-    brand: product.brand,
-    sku: product.sku,
-    category: product.category,
-    price: basePrice,
-    stockQuantity: product.stockQuantity,
-    inStock,
-    rating: product.rating,
-    reviewCount: product.reviewCount,
-    hasVariants,
-    hasModifiers,
-    requiresConfiguration,
+    ...baseProduct,
     isWishlisted,
-    images: product.images,
-    variants,
-    attributes,
-    modifierGroups,
   };
 };
