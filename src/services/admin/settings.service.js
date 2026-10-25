@@ -1,6 +1,7 @@
 import prisma from '../../config/db.js';
 import { logAdminAction } from '../../utils/auditLogger.js';
 import { ENV } from '../../config/env.js';
+import { getCache, setCache, deleteCache } from '../../utils/cache.js';
 
 const DEFAULT_CONFIG_ID = 'default_store_config';
 
@@ -33,6 +34,12 @@ export const DEFAULT_PAYMENT_METHODS = {
  * Retrieves the store configuration, initializing default config if not present
  */
 export const getStoreSettingsService = async () => {
+  const cacheKey = 'cache:store:settings';
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   let config = await prisma.storeConfig.findUnique({
     where: { id: DEFAULT_CONFIG_ID },
     include: {
@@ -72,6 +79,7 @@ export const getStoreSettingsService = async () => {
     });
   }
 
+  await setCache(cacheKey, config, 3600);
   return config;
 };
 
@@ -102,6 +110,8 @@ export const updateStoreSettingsService = async ({ adminUser, settingsData, req 
     req,
   });
 
+  await deleteCache('cache:store:settings');
+
   return updated;
 };
 
@@ -127,6 +137,8 @@ export const updateThemeService = async ({ adminUser, themeId, req }) => {
     details: { activeTheme: themeId },
     req,
   });
+
+  await deleteCache('cache:store:settings');
 
   return updated;
 };
@@ -163,6 +175,8 @@ export const updateFeatureFlagsService = async ({ adminUser, features, req }) =>
     details: { updatedFlags: features },
     req,
   });
+
+  await deleteCache('cache:store:settings');
 
   return updated;
 };

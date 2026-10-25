@@ -8,9 +8,10 @@ export const ENV = {
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
   API_PREFIX: process.env.API_PREFIX || '/api/v1',
 
-  // Database
+  // Database & Cache
   DATABASE_URL: process.env.DATABASE_URL,
   DIRECT_URL: process.env.DIRECT_URL,
+  REDIS_URL: process.env.REDIS_URL || null,
 
   // JWT Configuration
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'fallback_access_secret_dress_ecomm_2026',

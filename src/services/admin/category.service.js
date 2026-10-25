@@ -1,6 +1,7 @@
 import prisma from '../../config/db.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { generateUniqueSlug } from '../../utils/slug.js';
+import { purgeCache } from '../../utils/cache.js';
 
 const createServiceError = (message, statusCode = HTTP_STATUS.BAD_REQUEST, code = 'ERROR') => {
   const error = new Error(message);
@@ -318,6 +319,8 @@ export const createCategoryService = async (data) => {
     },
   });
 
+  await purgeCache('cache:categories');
+
   return newCategory;
 };
 
@@ -416,6 +419,8 @@ export const updateCategoryService = async (id, data) => {
     },
   });
 
+  await purgeCache('cache:categories');
+
   return {
     ...updated,
     productCount: updated._count.products,
@@ -465,6 +470,8 @@ export const deleteCategoryService = async (id, { force = false } = {}) => {
   await prisma.category.delete({
     where: { id },
   });
+
+  await purgeCache('cache:categories');
 
   return {
     id,

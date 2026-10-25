@@ -2,6 +2,7 @@ import prisma from '../../config/db.js';
 import { hashPassword, comparePassword } from '../../utils/password.js';
 import { AppError } from '../../middlewares/errorHandler.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
+import { invalidateUserSession } from '../../utils/cache.js';
 
 /**
  * Splits a full name string into firstName and lastName
@@ -151,6 +152,8 @@ export const updateAccountDetailsService = async (
     },
   });
 
+  await invalidateUserSession(userId);
+
   const { firstName: fName, lastName: lName } = splitName(updatedUser.name);
 
   return {
@@ -185,6 +188,8 @@ export const updateCustomerAvatarService = async (userId, avatarUrl) => {
       updatedAt: true,
     },
   });
+
+  await invalidateUserSession(userId);
 
   return updatedUser;
 };
@@ -248,6 +253,8 @@ export const changePasswordService = async (userId, { currentPassword, newPasswo
   await prisma.refreshToken.deleteMany({
     where: { userId },
   });
+
+  await invalidateUserSession(userId);
 
   return {
     message: 'Password changed successfully. Please log in again with your new password.',

@@ -4,6 +4,7 @@ import { ROLE_DEFAULT_PERMISSIONS } from '../constants/permissions.js';
 import { sendError } from '../utils/apiResponse.js';
 import { verifyAccessToken } from '../utils/jwt.js';
 import prisma from '../config/db.js';
+import { getCache, setCache } from '../utils/cache.js';
 
 /**
  * Middleware to authenticate requests via JWT access token
@@ -38,19 +39,29 @@ export const authenticate = async (req, res, next) => {
       });
     }
 
-    // 3. Verify user still exists & is active
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.sub },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        permissions: true,
-        createdById: true,
-        isActive: true,
-      },
-    });
+    // 3. Verify user still exists & is active (Cache-first with Redis / memory fallback)
+    const userCacheKey = `auth:user:${decoded.sub}`;
+    let user = await getCache(userCacheKey);
+
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: { id: decoded.sub },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          permissions: true,
+          createdById: true,
+          isActive: true,
+        },
+      });
+
+      if (user && user.isActive) {
+        // Cache user session for 15 minutes (matches access token lifetime)
+        await setCache(userCacheKey, user, 900);
+      }
+    }
 
     if (!user || !user.isActive) {
       return sendError(res, {
@@ -187,18 +198,27 @@ export const optionalAuthenticate = async (req, res, next) => {
       return next();
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.sub },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        permissions: true,
-        createdById: true,
-        isActive: true,
-      },
-    });
+    const userCacheKey = `auth:user:${decoded.sub}`;
+    let user = await getCache(userCacheKey);
+
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: { id: decoded.sub },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          permissions: true,
+          createdById: true,
+          isActive: true,
+        },
+      });
+
+      if (user && user.isActive) {
+        await setCache(userCacheKey, user, 900);
+      }
+    }
 
     if (user && user.isActive) {
       req.user = user;

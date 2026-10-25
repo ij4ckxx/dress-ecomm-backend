@@ -15,6 +15,7 @@ import {
   sendPasswordResetEmail,
   sendPasswordResetSuccessEmail,
 } from './notification/email.service.js';
+import { invalidateUserSession } from '../utils/cache.js';
 
 export class AuthService {
   /**
@@ -150,6 +151,15 @@ export class AuthService {
     }
 
     const tokenHash = hashToken(refreshToken);
+
+    const tokenRecord = await prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      select: { userId: true },
+    });
+
+    if (tokenRecord?.userId) {
+      await invalidateUserSession(tokenRecord.userId);
+    }
 
     // Revoke or delete from database (idempotent: deleteMany won't throw if not found)
     await prisma.refreshToken.deleteMany({
@@ -517,6 +527,8 @@ export const resetPasswordWithToken = async ({ email, token, newPassword }) => {
       where: { userId: user.id },
     }),
   ]);
+
+  await invalidateUserSession(user.id);
 
   // 5. Send confirmation email
   sendPasswordResetSuccessEmail({

@@ -4,6 +4,7 @@ import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { formatPrice } from '../../utils/pricing.js';
 import { parsePagination, formatPagination } from '../../utils/pagination.js';
 import { PRODUCT_SORT_OPTIONS } from '../../constants/sortOptions.js';
+import { getCache, setCache } from '../../utils/cache.js';
 
 /**
  * Builds a hierarchical tree from a flat list of categories
@@ -77,6 +78,12 @@ export const getDescendantCategoryIds = async (rootCategoryId) => {
  * @returns {Promise<Array>}
  */
 export const getCategories = async ({ tree = false, rootOnly = false } = {}) => {
+  const cacheKey = `cache:categories:${tree ? 'tree' : rootOnly ? 'root' : 'flat'}`;
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const where = { isActive: true };
   if (rootOnly && !tree) {
     where.parentId = null;
@@ -99,20 +106,22 @@ export const getCategories = async ({ tree = false, rootOnly = false } = {}) => 
     },
   });
 
-  if (tree) {
-    return buildCategoryTree(categories);
-  }
+  const result = tree
+    ? buildCategoryTree(categories)
+    : categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        description: cat.description,
+        imageUrl: cat.imageUrl,
+        parentId: cat.parentId,
+        sortOrder: cat.sortOrder,
+        productCount: cat._count?.products ?? 0,
+      }));
 
-  return categories.map((cat) => ({
-    id: cat.id,
-    name: cat.name,
-    slug: cat.slug,
-    description: cat.description,
-    imageUrl: cat.imageUrl,
-    parentId: cat.parentId,
-    sortOrder: cat.sortOrder,
-    productCount: cat._count?.products ?? 0,
-  }));
+  // Cache categories for 1 hour (3600 seconds)
+  await setCache(cacheKey, result, 3600);
+  return result;
 };
 
 /**
@@ -121,6 +130,12 @@ export const getCategories = async ({ tree = false, rootOnly = false } = {}) => 
  * @returns {Promise<object>}
  */
 export const getCategoryBySlug = async (slug) => {
+  const cacheKey = `cache:categories:slug:${slug}`;
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const category = await prisma.category.findUnique({
     where: { slug, isActive: true },
     select: {
@@ -169,7 +184,7 @@ export const getCategoryBySlug = async (slug) => {
     throw new AppError('Category not found', HTTP_STATUS.NOT_FOUND, 'CATEGORY_NOT_FOUND');
   }
 
-  return {
+  const result = {
     id: category.id,
     name: category.name,
     slug: category.slug,
@@ -188,6 +203,9 @@ export const getCategoryBySlug = async (slug) => {
       productCount: child._count?.products ?? 0,
     })),
   };
+
+  await setCache(cacheKey, result, 3600);
+  return result;
 };
 
 /**

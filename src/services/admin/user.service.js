@@ -3,6 +3,7 @@ import prisma from '../../config/db.js';
 import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import { ROLES, ROLE_HIERARCHY, CREATABLE_ROLES } from '../../constants/roles.js';
 import { PERMISSIONS, ROLE_DEFAULT_PERMISSIONS } from '../../constants/permissions.js';
+import { invalidateUserSession } from '../../utils/cache.js';
 
 /**
  * Custom error helper for service layer
@@ -307,6 +308,8 @@ export const updateUserService = async ({ currentUser, targetUserId, updateData 
     },
   });
 
+  await invalidateUserSession(targetUserId);
+
   return updatedUser;
 };
 
@@ -354,6 +357,8 @@ export const toggleUserStatusService = async ({ currentUser, targetUserId, isAct
       updatedAt: true,
     },
   });
+
+  await invalidateUserSession(targetUserId);
 
   return updated;
 };
