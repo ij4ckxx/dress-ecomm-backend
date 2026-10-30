@@ -3,6 +3,7 @@ import {
   listCategories,
   getCategoryDetails,
   getCategoryProductList,
+  getCategoryFilterOptions,
 } from '../../controllers/client/category.controller.js';
 import { optionalAuthenticate } from '../../middlewares/auth.middleware.js';
 import { validateQuery, validateParams } from '../../middlewares/validate.js';
@@ -27,6 +28,14 @@ router.get(
   validateParams(categorySlugParamsSchema),
   validateQuery(categoryProductsQuerySchema),
   getCategoryProductList
+);
+
+// Get available dynamic filter options for a category (PLP sidebar)
+router.get(
+  '/:slug/filters',
+  optionalAuthenticate,
+  validateParams(categorySlugParamsSchema),
+  getCategoryFilterOptions
 );
 
 export default router;

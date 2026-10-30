@@ -3,6 +3,7 @@ import { HTTP_STATUS } from '../../constants/httpStatusCodes.js';
 import {
   getProducts,
   getProductBySlug,
+  getProductFilters,
 } from '../../services/client/product.service.js';
 
 /**
@@ -37,6 +38,23 @@ export const getProductDetails = async (req, res, next) => {
       statusCode: HTTP_STATUS.OK,
       message: 'Product details fetched successfully',
       data: product,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Gets dynamic catalog filter options (facets, attributes, price range, brands, categories)
+ */
+export const getProductFilterOptions = async (req, res, next) => {
+  try {
+    const filters = await getProductFilters(req.query);
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Product filter options fetched successfully',
+      data: filters,
     });
   } catch (error) {
     next(error);

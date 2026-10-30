@@ -5,6 +5,7 @@ import {
   getCategoryBySlug,
   getCategoryProducts,
 } from '../../services/client/category.service.js';
+import { getProductFilters } from '../../services/client/product.service.js';
 
 /**
  * Lists categories (tree hierarchy, root-only, or flat)
@@ -59,6 +60,24 @@ export const getCategoryProductList = async (req, res, next) => {
         products,
       },
       pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Gets dynamic filter options scoped to a category
+ */
+export const getCategoryFilterOptions = async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    const filters = await getProductFilters({ ...req.query, category: slug });
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.OK,
+      message: 'Category filter options fetched successfully',
+      data: filters,
     });
   } catch (error) {
     next(error);

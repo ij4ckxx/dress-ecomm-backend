@@ -125,24 +125,53 @@ export const getProducts = async (query = {}, userId = null) => {
     andConditions.push({ isFeatured: Boolean(query.isFeatured) });
   }
 
-  // Generic dynamic attributes filtering (e.g., ?color=black&size=xl&material=silk)
+  // Generic dynamic attributes filtering (e.g., ?color=black,red&size=xl,l&fabric=silk)
+  // Supports both direct product attributes and variant attributes with multi-value comma separation
   for (const [key, value] of Object.entries(query)) {
     if (!KNOWN_QUERY_KEYS.has(key) && typeof value === 'string' && value.trim()) {
       const attrSlug = key.trim().toLowerCase();
-      const valSlug = value.trim().toLowerCase();
+      const valSlugs = value
+        .trim()
+        .toLowerCase()
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
 
-      andConditions.push({
-        attributes: {
-          some: {
-            attributeValue: {
-              slug: valSlug,
-              attribute: {
-                slug: attrSlug,
+      if (valSlugs.length > 0) {
+        andConditions.push({
+          OR: [
+            {
+              attributes: {
+                some: {
+                  attributeValue: {
+                    slug: { in: valSlugs },
+                    attribute: {
+                      slug: attrSlug,
+                    },
+                  },
+                },
               },
             },
-          },
-        },
-      });
+            {
+              variants: {
+                some: {
+                  isActive: true,
+                  attributes: {
+                    some: {
+                      attributeValue: {
+                        slug: { in: valSlugs },
+                        attribute: {
+                          slug: attrSlug,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        });
+      }
     }
   }
 
@@ -257,69 +286,70 @@ export const getProductBySlug = async (slug, userId = null) => {
       where: { slug, isActive: true },
       include: {
         category: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          parent: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            parent: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
             },
           },
         },
-      },
-      images: {
-        orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
-        select: {
-          id: true,
-          url: true,
-          altText: true,
-          isThumbnail: true,
-          sortOrder: true,
-          variantId: true,
+        images: {
+          orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
+          select: {
+            id: true,
+            url: true,
+            altText: true,
+            isThumbnail: true,
+            sortOrder: true,
+            variantId: true,
+          },
         },
-      },
-      attributes: {
-        select: {
-          attributeValue: {
-            select: {
-              id: true,
-              value: true,
-              slug: true,
-              attribute: {
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
+        attributes: {
+          select: {
+            attributeValue: {
+              select: {
+                id: true,
+                value: true,
+                slug: true,
+                attribute: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                  },
                 },
               },
             },
           },
         },
-      },
-      variants: {
-        where: { isActive: true },
-        orderBy: { createdAt: 'asc' },
-        include: {
-          images: {
-            select: {
-              id: true,
-              url: true,
-              altText: true,
+        variants: {
+          where: { isActive: true },
+          orderBy: { createdAt: 'asc' },
+          include: {
+            images: {
+              select: {
+                id: true,
+                url: true,
+                altText: true,
+              },
             },
-          },
-          attributes: {
-            select: {
-              attributeValue: {
-                select: {
-                  value: true,
-                  slug: true,
-                  attribute: {
-                    select: {
-                      name: true,
-                      slug: true,
+            attributes: {
+              select: {
+                attributeValue: {
+                  select: {
+                    value: true,
+                    slug: true,
+                    attribute: {
+                      select: {
+                        name: true,
+                        slug: true,
+                      },
                     },
                   },
                 },
@@ -327,24 +357,23 @@ export const getProductBySlug = async (slug, userId = null) => {
             },
           },
         },
-      },
-      modifierGroups: {
-        orderBy: { sortOrder: 'asc' },
-        include: {
-          options: {
-            orderBy: { sortOrder: 'asc' },
-            select: {
-              id: true,
-              name: true,
-              priceDelta: true,
-              isDefault: true,
-              sortOrder: true,
+        modifierGroups: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            options: {
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                name: true,
+                priceDelta: true,
+                isDefault: true,
+                sortOrder: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
     if (!product) {
       throw new AppError('Product not found', HTTP_STATUS.NOT_FOUND, 'PRODUCT_NOT_FOUND');
@@ -353,62 +382,62 @@ export const getProductBySlug = async (slug, userId = null) => {
     // Format base pricing
     const basePrice = formatPrice(product.regularPrice, product.salePrice, product.offerPrice);
 
-  // Format variants with variant-specific pricing
-  const variants = product.variants.map((v) => {
-    // If variant doesn't have an explicit price, inherit product base price
-    const varReg = v.regularPrice ?? product.regularPrice;
-    const varSale = v.salePrice ?? null;
-    const varOffer = v.offerPrice ?? null;
+    // Format variants with variant-specific pricing
+    const variants = product.variants.map((v) => {
+      // If variant doesn't have an explicit price, inherit product base price
+      const varReg = v.regularPrice ?? product.regularPrice;
+      const varSale = v.salePrice ?? null;
+      const varOffer = v.offerPrice ?? null;
 
-    const variantPrice = formatPrice(varReg, varSale, varOffer);
+      const variantPrice = formatPrice(varReg, varSale, varOffer);
 
-    const attributes = v.attributes.map((a) => ({
-      attribute: a.attributeValue.attribute.name,
-      attributeSlug: a.attributeValue.attribute.slug,
-      value: a.attributeValue.value,
-      valueSlug: a.attributeValue.slug,
+      const attributes = v.attributes.map((a) => ({
+        attribute: a.attributeValue.attribute.name,
+        attributeSlug: a.attributeValue.attribute.slug,
+        value: a.attributeValue.value,
+        valueSlug: a.attributeValue.slug,
+      }));
+
+      return {
+        id: v.id,
+        sku: v.sku,
+        name: v.name,
+        price: variantPrice,
+        stockQuantity: v.stockQuantity,
+        inStock: v.stockQuantity > 0,
+        images: v.images,
+        attributes,
+      };
+    });
+
+    // Format dynamic attributes
+    const attributes = product.attributes.map((attr) => ({
+      attribute: attr.attributeValue.attribute.name,
+      attributeSlug: attr.attributeValue.attribute.slug,
+      value: attr.attributeValue.value,
+      valueSlug: attr.attributeValue.slug,
     }));
 
-    return {
-      id: v.id,
-      sku: v.sku,
-      name: v.name,
-      price: variantPrice,
-      stockQuantity: v.stockQuantity,
-      inStock: v.stockQuantity > 0,
-      images: v.images,
-      attributes,
-    };
-  });
-
-  // Format dynamic attributes
-  const attributes = product.attributes.map((attr) => ({
-    attribute: attr.attributeValue.attribute.name,
-    attributeSlug: attr.attributeValue.attribute.slug,
-    value: attr.attributeValue.value,
-    valueSlug: attr.attributeValue.slug,
-  }));
-
-  // Format modifiers
-  const modifierGroups = product.modifierGroups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    displayName: group.displayName || group.name,
-    type: group.type,
-    defaultValue: group.defaultValue || null,
-    config: group.config || {},
-    isRequired: group.isRequired,
-    minSelection: group.minSelection,
-    maxSelection: group.maxSelection,
-    sortOrder: group.sortOrder,
-    options: group.options.map((opt) => ({
-      id: opt.id,
-      name: opt.name,
-      priceDelta: typeof opt.priceDelta?.toNumber === 'function' ? opt.priceDelta.toNumber() : Number(opt.priceDelta),
-      isDefault: opt.isDefault,
-      sortOrder: opt.sortOrder,
-    })),
-  }));
+    // Format modifiers
+    const modifierGroups = product.modifierGroups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      displayName: group.displayName || group.name,
+      type: group.type,
+      defaultValue: group.defaultValue || null,
+      config: group.config || {},
+      isRequired: group.isRequired,
+      minSelection: group.minSelection,
+      maxSelection: group.maxSelection,
+      sortOrder: group.sortOrder,
+      options: group.options.map((opt) => ({
+        id: opt.id,
+        name: opt.name,
+        priceDelta: typeof opt.priceDelta?.toNumber === 'function' ? opt.priceDelta.toNumber() : Number(opt.priceDelta),
+        isDefault: opt.isDefault,
+        sortOrder: opt.sortOrder,
+      })),
+    }));
 
     const hasVariants = variants.length > 0;
     const hasModifiers = modifierGroups.length > 0;
@@ -460,4 +489,348 @@ export const getProductBySlug = async (slug, userId = null) => {
     ...baseProduct,
     isWishlisted,
   };
+};
+
+/**
+ * Retrieves dynamic catalog filter options (facets) for storefront sidebar rendering:
+ * - Scoped by category and/or search term and brand
+ * - Returns accurate deduplicated product counts across product-level and variant-level attributes
+ * - Dynamic price boundaries (min and max)
+ * - Active brand lists with item counts
+ * - Subcategories with product counts
+ * - Availability (in-stock vs out-of-stock)
+ * - Ratings breakdown
+ * - High-speed caching (5 minutes TTL)
+ *
+ * @param {object} query
+ * @param {string} [query.category] - Category slug or UUID
+ * @param {string} [query.search] - Search keyword
+ * @param {string} [query.brand] - Specific brand
+ * @returns {Promise<object>}
+ */
+export const getProductFilters = async (query = {}) => {
+  const catSlug = query.category?.trim() || null;
+  const search = query.search?.trim() || null;
+  const brand = query.brand?.trim() || null;
+
+  // Normalized cache key
+  const cacheKey = `cache:product:filters:${catSlug || 'all'}:${search ? search.toLowerCase() : 'all'}:${brand ? brand.toLowerCase() : 'all'}`;
+  const cachedData = await getCache(cacheKey);
+  if (cachedData) {
+    return cachedData;
+  }
+
+  // 1. Resolve Category Scope
+  let matchedCategory = null;
+  let categoryIds = null;
+  if (catSlug) {
+    matchedCategory = await prisma.category.findFirst({
+      where: {
+        OR: [{ slug: catSlug }, { id: catSlug }],
+        isActive: true,
+      },
+      select: { id: true, name: true, slug: true, parentId: true },
+    });
+
+    if (matchedCategory) {
+      categoryIds = await getDescendantCategoryIds(matchedCategory.id);
+    } else {
+      categoryIds = ['non_existent_category_id'];
+    }
+  }
+
+  // 2. Fetch Relevant Subcategories / Root Categories for Sidebar Tree
+  let categoriesToList = [];
+  if (matchedCategory) {
+    // Look for child categories first
+    const childCategories = await prisma.category.findMany({
+      where: {
+        parentId: matchedCategory.id,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        imageUrl: true,
+        _count: {
+          select: {
+            products: {
+              where: { isActive: true },
+            },
+          },
+        },
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    // If it's a leaf category (no children) and has a parent, show siblings
+    if (childCategories.length === 0 && matchedCategory.parentId) {
+      categoriesToList = await prisma.category.findMany({
+        where: {
+          parentId: matchedCategory.parentId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          imageUrl: true,
+          _count: {
+            select: {
+              products: {
+                where: { isActive: true },
+              },
+            },
+          },
+        },
+        orderBy: { sortOrder: 'asc' },
+      });
+    } else {
+      categoriesToList = childCategories;
+    }
+  } else {
+    // If no category specified, return root categories
+    categoriesToList = await prisma.category.findMany({
+      where: {
+        parentId: null,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        imageUrl: true,
+        _count: {
+          select: {
+            products: {
+              where: { isActive: true },
+            },
+          },
+        },
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  const categories = categoriesToList.map((c) => ({
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    imageUrl: c.imageUrl,
+    productCount: c._count.products,
+  }));
+
+  // 3. Build Base Where Clause for Active Matching Products
+  const baseWhere = {
+    isActive: true,
+  };
+  const andConditions = [];
+
+  if (categoryIds) {
+    andConditions.push({ categoryId: { in: categoryIds } });
+  }
+
+  if (search) {
+    andConditions.push({
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { brand: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { category: { name: { contains: search, mode: 'insensitive' } } },
+      ],
+    });
+  }
+
+  if (brand) {
+    andConditions.push({
+      brand: { equals: brand, mode: 'insensitive' },
+    });
+  }
+
+  if (andConditions.length > 0) {
+    baseWhere.AND = andConditions;
+  }
+
+  // 4. Fetch Aggregate Metrics (Price bounds, stock quantities, and matching products)
+  const [priceAgg, inStockCount, outOfStockCount, matchingProducts] = await Promise.all([
+    prisma.product.aggregate({
+      where: baseWhere,
+      _min: { regularPrice: true, salePrice: true, offerPrice: true },
+      _max: { regularPrice: true, salePrice: true, offerPrice: true },
+      _count: { _all: true },
+    }),
+    prisma.product.count({
+      where: {
+        ...baseWhere,
+        stockQuantity: { gt: 0 },
+      },
+    }),
+    prisma.product.count({
+      where: {
+        ...baseWhere,
+        stockQuantity: { lte: 0 },
+      },
+    }),
+    prisma.product.findMany({
+      where: baseWhere,
+      select: {
+        id: true,
+        brand: true,
+        rating: true,
+      },
+    }),
+  ]);
+
+  const totalProducts = priceAgg._count._all;
+
+  // Compute clean price bounds
+  let minPrice = 0;
+  let maxPrice = 0;
+  if (totalProducts > 0) {
+    const regularMin = priceAgg._min.regularPrice ? Number(priceAgg._min.regularPrice) : 0;
+    const saleMin = priceAgg._min.salePrice ? Number(priceAgg._min.salePrice) : regularMin;
+    const offerMin = priceAgg._min.offerPrice ? Number(priceAgg._min.offerPrice) : saleMin;
+    minPrice = Math.min(regularMin, saleMin, offerMin);
+
+    const regularMax = priceAgg._max.regularPrice ? Number(priceAgg._max.regularPrice) : 0;
+    const saleMax = priceAgg._max.salePrice ? Number(priceAgg._max.salePrice) : regularMax;
+    const offerMax = priceAgg._max.offerPrice ? Number(priceAgg._max.offerPrice) : saleMax;
+    maxPrice = Math.max(regularMax, saleMax, offerMax);
+  }
+
+  // 5. Aggregate Brands with item counts
+  const brandCountMap = new Map();
+  for (const p of matchingProducts) {
+    if (p.brand && p.brand.trim()) {
+      const bName = p.brand.trim();
+      brandCountMap.set(bName, (brandCountMap.get(bName) || 0) + 1);
+    }
+  }
+  const brands = Array.from(brandCountMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  // 6. Ratings Summary
+  const ratingsSummary = [
+    { rating: 4, label: '4★ & above', count: matchingProducts.filter((p) => p.rating >= 4).length },
+    { rating: 3, label: '3★ & above', count: matchingProducts.filter((p) => p.rating >= 3).length },
+  ];
+
+  // 7. Aggregate Dynamic Filterable Attributes (Color, Size, Fabric, Occasion, etc.)
+  const matchingProductIds = matchingProducts.map((p) => p.id);
+
+  const allFilterableAttributes = await prisma.attribute.findMany({
+    where: { isFilterable: true },
+    include: {
+      values: {
+        select: {
+          id: true,
+          value: true,
+          slug: true,
+        },
+        orderBy: { value: 'asc' },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  let directAttrValues = [];
+  let variantAttrValues = [];
+
+  if (matchingProductIds.length > 0) {
+    [directAttrValues, variantAttrValues] = await Promise.all([
+      prisma.productAttributeValue.findMany({
+        where: { productId: { in: matchingProductIds } },
+        select: {
+          productId: true,
+          attributeValueId: true,
+        },
+      }),
+      prisma.productVariantAttribute.findMany({
+        where: {
+          variant: {
+            productId: { in: matchingProductIds },
+            isActive: true,
+          },
+        },
+        select: {
+          variant: { select: { productId: true } },
+          attributeValueId: true,
+        },
+      }),
+    ]);
+  }
+
+  // Map: attributeValueId -> Set of unique productIds
+  const attrValueProductSets = new Map();
+
+  for (const dav of directAttrValues) {
+    if (!attrValueProductSets.has(dav.attributeValueId)) {
+      attrValueProductSets.set(dav.attributeValueId, new Set());
+    }
+    attrValueProductSets.get(dav.attributeValueId).add(dav.productId);
+  }
+
+  for (const vav of variantAttrValues) {
+    if (!attrValueProductSets.has(vav.attributeValueId)) {
+      attrValueProductSets.set(vav.attributeValueId, new Set());
+    }
+    attrValueProductSets.get(vav.attributeValueId).add(vav.variant.productId);
+  }
+
+  const attributes = allFilterableAttributes
+    .map((attr) => {
+      const values = attr.values
+        .map((v) => {
+          const productSet = attrValueProductSets.get(v.id);
+          const count = productSet ? productSet.size : 0;
+          return {
+            id: v.id,
+            name: v.value,
+            slug: v.slug,
+            count,
+          };
+        })
+        .filter((v) => v.count > 0)
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+      return {
+        id: attr.id,
+        name: attr.name,
+        slug: attr.slug,
+        values,
+      };
+    })
+    .filter((attr) => attr.values.length > 0);
+
+  // 8. Assemble Full Filter Response
+  const filterResult = {
+    totalProducts,
+    category: matchedCategory
+      ? {
+          id: matchedCategory.id,
+          name: matchedCategory.name,
+          slug: matchedCategory.slug,
+        }
+      : null,
+    priceRange: {
+      min: minPrice,
+      max: maxPrice,
+    },
+    categories,
+    brands,
+    attributes,
+    ratings: ratingsSummary,
+    availability: {
+      inStock: inStockCount,
+      outOfStock: outOfStockCount,
+    },
+  };
+
+  // Cache filter options for 5 minutes (300 seconds)
+  await setCache(cacheKey, filterResult, 300);
+
+  return filterResult;
 };

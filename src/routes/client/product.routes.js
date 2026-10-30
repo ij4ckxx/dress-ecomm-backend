@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listProducts,
   getProductDetails,
+  getProductFilterOptions,
 } from '../../controllers/client/product.controller.js';
 import {
   getProductReviews,
@@ -13,6 +14,7 @@ import { uploadMultipleImages } from '../../middlewares/upload.middleware.js';
 import { validateImageExclusivity, parseFormDataJsonFields } from '../../middlewares/imageExclusivity.js';
 import {
   productQuerySchema,
+  productFilterQuerySchema,
   productSlugParamsSchema,
 } from '../../validators/product.validator.js';
 import {
@@ -25,6 +27,9 @@ const router = Router();
 
 // Reusable product discovery API (search, filter, dynamic attributes, sort, pagination)
 router.get('/', optionalAuthenticate, validateQuery(productQuerySchema), listProducts);
+
+// Dynamic filter options API (available colors, sizes, attributes, price bounds, brands, subcategories)
+router.get('/filters', optionalAuthenticate, validateQuery(productFilterQuerySchema), getProductFilterOptions);
 
 // Complete product details API
 router.get('/:slug', optionalAuthenticate, validateParams(productSlugParamsSchema), getProductDetails);

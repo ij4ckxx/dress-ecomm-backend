@@ -22,6 +22,14 @@ export const productQuerySchema = z.object({
   isFeatured: booleanString,
 }).passthrough();
 
+export const productFilterQuerySchema = z.object({
+  category: z.string().trim().optional(),
+  search: z.string().trim().optional(),
+  brand: z.string().trim().optional(),
+  minPrice: z.union([z.string(), z.number()]).optional(),
+  maxPrice: z.union([z.string(), z.number()]).optional(),
+}).passthrough();
+
 export const productSlugParamsSchema = z.object({
   slug: z.string().trim().min(1, 'Product slug is required'),
 });
