@@ -20,6 +20,8 @@ export const productQuerySchema = z.object({
   maxPrice: z.union([z.string(), z.number()]).optional(),
   sort: z.enum(ALLOWED_SORT_VALUES).optional(),
   isFeatured: booleanString,
+  inStock: booleanString,
+  rating: z.union([z.string(), z.number()]).optional(),
 }).passthrough();
 
 export const productFilterQuerySchema = z.object({
@@ -28,6 +30,8 @@ export const productFilterQuerySchema = z.object({
   brand: z.string().trim().optional(),
   minPrice: z.union([z.string(), z.number()]).optional(),
   maxPrice: z.union([z.string(), z.number()]).optional(),
+  inStock: booleanString,
+  rating: z.union([z.string(), z.number()]).optional(),
 }).passthrough();
 
 export const productSlugParamsSchema = z.object({

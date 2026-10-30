@@ -17,6 +17,8 @@ const KNOWN_QUERY_KEYS = new Set([
   'maxPrice',
   'sort',
   'isFeatured',
+  'inStock',
+  'rating',
 ]);
 
 /**
@@ -123,6 +125,27 @@ export const getProducts = async (query = {}, userId = null) => {
   // Featured flag
   if (query.isFeatured !== undefined) {
     andConditions.push({ isFeatured: Boolean(query.isFeatured) });
+  }
+
+  // In-stock availability filter (supports root stock or active variant stocks)
+  if (query.inStock !== undefined && query.inStock !== '') {
+    const isInStock = query.inStock === true || query.inStock === 'true' || query.inStock === '1';
+    if (isInStock) {
+      andConditions.push({
+        OR: [
+          { stockQuantity: { gt: 0 } },
+          { variants: { some: { isActive: true, stockQuantity: { gt: 0 } } } },
+        ],
+      });
+    }
+  }
+
+  // Minimum rating filter (e.g., rating=4 for 4★ & above)
+  if (query.rating !== undefined && query.rating !== '') {
+    const minRating = parseFloat(query.rating);
+    if (!isNaN(minRating)) {
+      andConditions.push({ rating: { gte: minRating } });
+    }
   }
 
   // Generic dynamic attributes filtering (e.g., ?color=black,red&size=xl,l&fabric=silk)
@@ -493,7 +516,7 @@ export const getProductBySlug = async (slug, userId = null) => {
 
 /**
  * Retrieves dynamic catalog filter options (facets) for storefront sidebar rendering:
- * - Scoped by category and/or search term and brand
+ * - Scoped by category and/or search term, brand, price, inStock, and rating
  * - Returns accurate deduplicated product counts across product-level and variant-level attributes
  * - Dynamic price boundaries (min and max)
  * - Active brand lists with item counts
@@ -506,15 +529,23 @@ export const getProductBySlug = async (slug, userId = null) => {
  * @param {string} [query.category] - Category slug or UUID
  * @param {string} [query.search] - Search keyword
  * @param {string} [query.brand] - Specific brand
+ * @param {number|string} [query.minPrice] - Minimum price filter
+ * @param {number|string} [query.maxPrice] - Maximum price filter
+ * @param {boolean|string} [query.inStock] - In-stock filter
+ * @param {number|string} [query.rating] - Minimum rating filter
  * @returns {Promise<object>}
  */
 export const getProductFilters = async (query = {}) => {
   const catSlug = query.category?.trim() || null;
   const search = query.search?.trim() || null;
   const brand = query.brand?.trim() || null;
+  const queryMinPrice = query.minPrice !== undefined && query.minPrice !== '' ? parseFloat(query.minPrice) : null;
+  const queryMaxPrice = query.maxPrice !== undefined && query.maxPrice !== '' ? parseFloat(query.maxPrice) : null;
+  const inStock = query.inStock !== undefined && query.inStock !== '' ? (query.inStock === true || query.inStock === 'true' || query.inStock === '1') : null;
+  const rating = query.rating !== undefined && query.rating !== '' ? parseFloat(query.rating) : null;
 
   // Normalized cache key
-  const cacheKey = `cache:product:filters:${catSlug || 'all'}:${search ? search.toLowerCase() : 'all'}:${brand ? brand.toLowerCase() : 'all'}`;
+  const cacheKey = `cache:product:filters:${catSlug || 'all'}:${search ? search.toLowerCase() : 'all'}:${brand ? brand.toLowerCase() : 'all'}:${queryMinPrice ?? 'all'}:${queryMaxPrice ?? 'all'}:${inStock ?? 'all'}:${rating ?? 'all'}`;
   const cachedData = await getCache(cacheKey);
   if (cachedData) {
     return cachedData;
@@ -621,18 +652,16 @@ export const getProductFilters = async (query = {}) => {
     productCount: c._count.products,
   }));
 
-  // 3. Build Base Where Clause for Active Matching Products
-  const baseWhere = {
-    isActive: true,
-  };
-  const andConditions = [];
+  // 3. Build Base Where Clauses for Active Matching Products
+  // Scope conditions: category, search keyword, and brand
+  const scopeConditions = [];
 
   if (categoryIds) {
-    andConditions.push({ categoryId: { in: categoryIds } });
+    scopeConditions.push({ categoryId: { in: categoryIds } });
   }
 
   if (search) {
-    andConditions.push({
+    scopeConditions.push({
       OR: [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
@@ -644,9 +673,44 @@ export const getProductFilters = async (query = {}) => {
   }
 
   if (brand) {
-    andConditions.push({
+    scopeConditions.push({
       brand: { equals: brand, mode: 'insensitive' },
     });
+  }
+
+  // Catalog scope where (for broad category/search price slider bounds)
+  const catalogWhere = {
+    isActive: true,
+  };
+  if (scopeConditions.length > 0) {
+    catalogWhere.AND = scopeConditions;
+  }
+
+  // Refined where for active drill-down filters (minPrice, maxPrice, inStock, rating)
+  const baseWhere = {
+    isActive: true,
+  };
+  const andConditions = [...scopeConditions];
+
+  if (queryMinPrice !== null && !isNaN(queryMinPrice)) {
+    andConditions.push({ regularPrice: { gte: queryMinPrice } });
+  }
+
+  if (queryMaxPrice !== null && !isNaN(queryMaxPrice)) {
+    andConditions.push({ regularPrice: { lte: queryMaxPrice } });
+  }
+
+  if (inStock) {
+    andConditions.push({
+      OR: [
+        { stockQuantity: { gt: 0 } },
+        { variants: { some: { isActive: true, stockQuantity: { gt: 0 } } } },
+      ],
+    });
+  }
+
+  if (rating !== null && !isNaN(rating)) {
+    andConditions.push({ rating: { gte: rating } });
   }
 
   if (andConditions.length > 0) {
@@ -656,7 +720,7 @@ export const getProductFilters = async (query = {}) => {
   // 4. Fetch Aggregate Metrics (Price bounds, stock quantities, and matching products)
   const [priceAgg, inStockCount, outOfStockCount, matchingProducts] = await Promise.all([
     prisma.product.aggregate({
-      where: baseWhere,
+      where: catalogWhere,
       _min: { regularPrice: true, salePrice: true, offerPrice: true },
       _max: { regularPrice: true, salePrice: true, offerPrice: true },
       _count: { _all: true },
@@ -664,13 +728,17 @@ export const getProductFilters = async (query = {}) => {
     prisma.product.count({
       where: {
         ...baseWhere,
-        stockQuantity: { gt: 0 },
+        OR: [
+          { stockQuantity: { gt: 0 } },
+          { variants: { some: { isActive: true, stockQuantity: { gt: 0 } } } },
+        ],
       },
     }),
     prisma.product.count({
       where: {
         ...baseWhere,
         stockQuantity: { lte: 0 },
+        variants: { none: { isActive: true, stockQuantity: { gt: 0 } } },
       },
     }),
     prisma.product.findMany({
@@ -683,12 +751,12 @@ export const getProductFilters = async (query = {}) => {
     }),
   ]);
 
-  const totalProducts = priceAgg._count._all;
+  const totalProducts = matchingProducts.length;
 
-  // Compute clean price bounds
+  // Compute clean price bounds from catalog scope
   let minPrice = 0;
   let maxPrice = 0;
-  if (totalProducts > 0) {
+  if (priceAgg._count._all > 0) {
     const regularMin = priceAgg._min.regularPrice ? Number(priceAgg._min.regularPrice) : 0;
     const saleMin = priceAgg._min.salePrice ? Number(priceAgg._min.salePrice) : regularMin;
     const offerMin = priceAgg._min.offerPrice ? Number(priceAgg._min.offerPrice) : saleMin;
