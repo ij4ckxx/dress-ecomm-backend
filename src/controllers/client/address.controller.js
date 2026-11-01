@@ -29,18 +29,25 @@ export const createAddress = async (req, res, next) => {
 };
 
 /**
- * Retrieves all saved addresses for the authenticated customer
+ * Retrieves saved addresses for the authenticated customer with pagination
  * GET /api/v1/customer/addresses
  * GET /api/customer/addresses
  */
 export const getAddresses = async (req, res, next) => {
   try {
-    const addresses = await getAddressesService(req.user.id);
+    const result = await getAddressesService({
+      userId: req.user.id,
+      query: req.query,
+    });
 
     return sendSuccess(res, {
       statusCode: HTTP_STATUS.OK,
       message: 'Addresses fetched successfully',
-      data: { addresses },
+      data: {
+        addresses: result.addresses,
+        pagination: result.pagination,
+      },
+      pagination: result.pagination,
     });
   } catch (error) {
     next(error);

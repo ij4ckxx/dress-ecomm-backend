@@ -75,17 +75,104 @@ export const createAddressService = async (userId, addressData) => {
 };
 
 /**
- * Retrieves all saved addresses for the authenticated customer
- * @param {string} userId - Authenticated customer UUID
- * @returns {Promise<Array<object>>} List of addresses
+ * Retrieves paginated saved addresses for the authenticated customer
+ * Supports page, limit, search, sort, and optional all=true
+ * @param {string|object} userIdOrParams - Customer UUID or options object { userId, query }
+ * @param {object} [queryParams] - Query parameters { page, limit, search, sort, all }
+ * @returns {Promise<{ addresses: Array<object>, pagination: object }>}
  */
-export const getAddressesService = async (userId) => {
-  const addresses = await prisma.address.findMany({
-    where: { userId },
-    orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
-  });
+export const getAddressesService = async (userIdOrParams, queryParams = {}) => {
+  let userId;
+  let query = {};
 
-  return addresses;
+  if (typeof userIdOrParams === 'object' && userIdOrParams !== null) {
+    userId = userIdOrParams.userId;
+    query = userIdOrParams.query || {};
+  } else {
+    userId = userIdOrParams;
+    query = queryParams || {};
+  }
+
+  const isAll = query?.all === true || query?.all === 'true';
+  const page = Math.max(1, parseInt(query?.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query?.limit, 10) || 10));
+  const search = query?.search ? String(query.search).trim() : null;
+  const sort = query?.sort || 'newest';
+
+  const where = { userId };
+
+  if (search) {
+    where.OR = [
+      { firstName: { contains: search, mode: 'insensitive' } },
+      { lastName: { contains: search, mode: 'insensitive' } },
+      { address1: { contains: search, mode: 'insensitive' } },
+      { address2: { contains: search, mode: 'insensitive' } },
+      { city: { contains: search, mode: 'insensitive' } },
+      { state: { contains: search, mode: 'insensitive' } },
+      { postalCode: { contains: search, mode: 'insensitive' } },
+      { country: { contains: search, mode: 'insensitive' } },
+      { company: { contains: search, mode: 'insensitive' } },
+      { phoneNumber: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+
+  // Ordering logic (prioritizes default address, followed by custom sort)
+  let orderBy = [{ isDefault: 'desc' }, { createdAt: 'desc' }];
+  if (sort === 'oldest') {
+    orderBy = [{ isDefault: 'desc' }, { createdAt: 'asc' }];
+  } else if (sort === 'city_asc') {
+    orderBy = [{ isDefault: 'desc' }, { city: 'asc' }, { createdAt: 'desc' }];
+  } else if (sort === 'city_desc') {
+    orderBy = [{ isDefault: 'desc' }, { city: 'desc' }, { createdAt: 'desc' }];
+  }
+
+  if (isAll) {
+    const [addresses, total] = await Promise.all([
+      prisma.address.findMany({
+        where,
+        orderBy,
+      }),
+      prisma.address.count({ where }),
+    ]);
+
+    return {
+      addresses,
+      pagination: {
+        page: 1,
+        limit: total || 1,
+        total,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    };
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [addresses, total] = await Promise.all([
+    prisma.address.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy,
+    }),
+    prisma.address.count({ where }),
+  ]);
+
+  const totalPages = Math.ceil(total / limit) || 1;
+
+  return {
+    addresses,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
 };
 
 /**

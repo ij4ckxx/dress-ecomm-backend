@@ -240,3 +240,19 @@ export const addressIdParamSchema = z.object({
     .string({ required_error: 'Address ID is required' })
     .uuid({ message: 'Invalid address ID format' }),
 });
+
+/**
+ * Schema for querying and paginating Customer Addresses
+ */
+export const addressQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+  search: z.string().trim().optional(),
+  sort: z.enum(['newest', 'oldest', 'city_asc', 'city_desc']).default('newest'),
+  all: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .optional()
+    .default(false)
+    .transform((val) => val === true || val === 'true'),
+});
+

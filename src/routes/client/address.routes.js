@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { authenticate } from '../../middlewares/auth.middleware.js';
-import { validate, validateParams } from '../../middlewares/validate.js';
+import { validate, validateQuery, validateParams } from '../../middlewares/validate.js';
 import {
   createAddressSchema,
   updateAddressSchema,
   addressIdParamSchema,
+  addressQuerySchema,
 } from '../../validators/address.validator.js';
 import {
   createAddress,
@@ -29,10 +30,10 @@ router.post('/', validate(createAddressSchema), createAddress);
 
 /**
  * @route   GET /api/v1/customer/addresses (or /api/customer/addresses)
- * @desc    Get all saved addresses for the authenticated customer
+ * @desc    Get paginated saved addresses for the authenticated customer with search, sort, and pagination
  * @access  Private (Authenticated Customer)
  */
-router.get('/', getAddresses);
+router.get('/', validateQuery(addressQuerySchema), getAddresses);
 
 /**
  * @route   GET /api/v1/customer/addresses/:addressId (or /api/customer/addresses/:addressId)
