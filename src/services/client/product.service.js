@@ -11,6 +11,7 @@ const KNOWN_QUERY_KEYS = new Set([
   'page',
   'limit',
   'search',
+  'q',
   'category',
   'brand',
   'minPrice',
@@ -67,8 +68,8 @@ export const getProducts = async (query = {}, userId = null) => {
   const andConditions = [];
 
   // Search across product name, description, brand, SKU, and category name
-  if (query.search) {
-    const search = query.search.trim();
+  const search = (query.search || query.q || '').trim();
+  if (search) {
     andConditions.push({
       OR: [
         { name: { contains: search, mode: 'insensitive' } },
@@ -232,13 +233,25 @@ export const getProducts = async (query = {}, userId = null) => {
         },
         images: {
           orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
-          take: 1,
+          take: 2,
           select: { url: true },
         },
         variants: {
           where: { isActive: true },
-          take: 1,
-          select: { id: true },
+          select: {
+            id: true,
+            attributes: {
+              select: {
+                attributeValue: {
+                  select: {
+                    value: true,
+                    slug: true,
+                    attribute: { select: { slug: true } },
+                  },
+                },
+              },
+            },
+          },
         },
         modifierGroups: {
           take: 1,
@@ -267,6 +280,19 @@ export const getProducts = async (query = {}, userId = null) => {
     const requiresConfiguration = hasVariants || hasModifiers;
     const price = formatPrice(p.regularPrice, p.salePrice, p.offerPrice);
 
+    // Extract distinct color swatches
+    const colors = [];
+    const seenColors = new Set();
+    p.variants.forEach((v) => {
+      v.attributes?.forEach((a) => {
+        const val = a.attributeValue;
+        if (val && val.attribute?.slug === 'color' && !seenColors.has(val.slug)) {
+          seenColors.add(val.slug);
+          colors.push({ name: val.value, slug: val.slug });
+        }
+      });
+    });
+
     return {
       id: p.id,
       name: p.name,
@@ -274,7 +300,9 @@ export const getProducts = async (query = {}, userId = null) => {
       brand: p.brand,
       category: p.category,
       thumbnail: p.images[0]?.url || null,
+      secondaryImage: p.images[1]?.url || null,
       price,
+      colors,
       rating: p.rating,
       reviewCount: p.reviewCount,
       hasVariants,
@@ -537,7 +565,7 @@ export const getProductBySlug = async (slug, userId = null) => {
  */
 export const getProductFilters = async (query = {}) => {
   const catSlug = query.category?.trim() || null;
-  const search = query.search?.trim() || null;
+  const search = (query.search || query.q)?.trim() || null;
   const brand = query.brand?.trim() || null;
   const queryMinPrice = query.minPrice !== undefined && query.minPrice !== '' ? parseFloat(query.minPrice) : null;
   const queryMaxPrice = query.maxPrice !== undefined && query.maxPrice !== '' ? parseFloat(query.maxPrice) : null;

@@ -22,15 +22,32 @@ export class AuthController {
         avatarUrl = uploaded.url;
       }
 
-      const user = await AuthService.register({
+      const userAgent = req.headers['user-agent'] || null;
+      const ipAddress = req.ip || req.connection?.remoteAddress || null;
+
+      const { user, accessToken, refreshToken } = await AuthService.register({
         ...req.body,
         avatarUrl,
+        userAgent,
+        ipAddress,
+      });
+
+      // Set secure HttpOnly cookie for the refresh token
+      res.cookie(AUTH_CONSTANTS.REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+        httpOnly: true,
+        secure: ENV.NODE_ENV === 'production',
+        sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: AUTH_CONSTANTS.COOKIE_MAX_AGE_MS,
       });
 
       return sendSuccess(res, {
         statusCode: HTTP_STATUS.CREATED,
         message: 'Registration successful',
-        data: { user },
+        data: {
+          user,
+          accessToken,
+          refreshToken,
+        },
       });
     } catch (error) {
       next(error);
@@ -67,6 +84,7 @@ export class AuthController {
         data: {
           user,
           accessToken,
+          refreshToken,
         },
       });
     } catch (error) {
@@ -108,6 +126,7 @@ export class AuthController {
         data: {
           user,
           accessToken,
+          refreshToken,
         },
       });
     } catch (error) {
@@ -193,6 +212,7 @@ export class AuthController {
         data: {
           user,
           accessToken,
+          refreshToken,
         },
       });
     } catch (error) {

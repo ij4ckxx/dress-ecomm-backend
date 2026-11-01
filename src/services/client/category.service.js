@@ -224,6 +224,13 @@ export const getCategoryProducts = async (slug, query = {}, userId = null) => {
       slug: true,
       description: true,
       imageUrl: true,
+      parent: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
     },
   });
 
@@ -231,39 +238,147 @@ export const getCategoryProducts = async (slug, query = {}, userId = null) => {
     throw new AppError('Category not found', HTTP_STATUS.NOT_FOUND, 'CATEGORY_NOT_FOUND');
   }
 
-  // Include products in this category and all its subcategories
-  const categoryIds = await getDescendantCategoryIds(category.id);
+  // Include products in this category and all its subcategories (or targeted subcategory if passed)
+  let targetCategoryIds;
+  if (query.subcategory) {
+    const subcat = await prisma.category.findFirst({
+      where: {
+        OR: [{ slug: query.subcategory.trim() }, { id: query.subcategory.trim() }],
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (subcat) {
+      targetCategoryIds = await getDescendantCategoryIds(subcat.id);
+    } else {
+      targetCategoryIds = ['non_existent_category_id'];
+    }
+  } else {
+    targetCategoryIds = await getDescendantCategoryIds(category.id);
+  }
 
   const { page, limit, skip, take } = parsePagination(query);
 
-  // Build filter conditions
-  const where = {
-    categoryId: { in: categoryIds },
-    isActive: true,
-  };
+  const andConditions = [
+    { categoryId: { in: targetCategoryIds } },
+    { isActive: true },
+  ];
 
-  if (query.search) {
-    const search = query.search.trim();
-    where.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
-      { brand: { contains: search, mode: 'insensitive' } },
-    ];
+  const search = (query.search || query.q || '').trim();
+  if (search) {
+    andConditions.push({
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { brand: { contains: search, mode: 'insensitive' } },
+      ],
+    });
   }
 
+  // Brand filter (supports comma-separated list or single value)
+  if (query.brand) {
+    const brands = query.brand
+      .split(',')
+      .map((b) => b.trim())
+      .filter(Boolean);
+    if (brands.length === 1) {
+      andConditions.push({
+        brand: { equals: brands[0], mode: 'insensitive' },
+      });
+    } else if (brands.length > 1) {
+      andConditions.push({
+        brand: { in: brands, mode: 'insensitive' },
+      });
+    }
+  }
+
+  // Price range filters
   if (query.minPrice !== undefined && query.minPrice !== '') {
     const min = parseFloat(query.minPrice);
     if (!isNaN(min)) {
-      where.regularPrice = { ...(where.regularPrice || {}), gte: min };
+      andConditions.push({ regularPrice: { gte: min } });
     }
   }
 
   if (query.maxPrice !== undefined && query.maxPrice !== '') {
     const max = parseFloat(query.maxPrice);
     if (!isNaN(max)) {
-      where.regularPrice = { ...(where.regularPrice || {}), lte: max };
+      andConditions.push({ regularPrice: { lte: max } });
     }
   }
+
+  // In-stock availability filter
+  if (query.inStock !== undefined && query.inStock !== '') {
+    const isInStock = query.inStock === true || query.inStock === 'true' || query.inStock === '1';
+    if (isInStock) {
+      andConditions.push({
+        OR: [
+          { stockQuantity: { gt: 0 } },
+          { variants: { some: { isActive: true, stockQuantity: { gt: 0 } } } },
+        ],
+      });
+    }
+  }
+
+  // Minimum rating filter
+  if (query.rating !== undefined && query.rating !== '') {
+    const minRating = parseFloat(query.rating);
+    if (!isNaN(minRating)) {
+      andConditions.push({ rating: { gte: minRating } });
+    }
+  }
+
+  // Generic dynamic attributes filtering (e.g. color=black,red&size=m,l&fabric=silk)
+  const KNOWN_KEYS = new Set([
+    'page', 'limit', 'sort', 'search', 'q', 'brand', 'minPrice', 'maxPrice',
+    'inStock', 'rating', 'subcategory', 'tree', 'rootOnly',
+  ]);
+
+  for (const [key, value] of Object.entries(query)) {
+    if (!KNOWN_KEYS.has(key) && typeof value === 'string' && value.trim()) {
+      const attrSlug = key.trim().toLowerCase();
+      const valSlugs = value
+        .trim()
+        .toLowerCase()
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (valSlugs.length > 0) {
+        andConditions.push({
+          OR: [
+            {
+              attributes: {
+                some: {
+                  attributeValue: {
+                    slug: { in: valSlugs },
+                    attribute: { slug: attrSlug },
+                  },
+                },
+              },
+            },
+            {
+              variants: {
+                some: {
+                  isActive: true,
+                  attributes: {
+                    some: {
+                      attributeValue: {
+                        slug: { in: valSlugs },
+                        attribute: { slug: attrSlug },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        });
+      }
+    }
+  }
+
+  const where = { AND: andConditions };
 
   // Sorting
   let orderBy = [{ createdAt: 'desc' }];
@@ -293,7 +408,6 @@ export const getCategoryProducts = async (slug, query = {}, userId = null) => {
       orderBy = [{ rating: 'desc' }];
       break;
     case PRODUCT_SORT_OPTIONS.BEST_DEALS:
-      // Primary sort by having a sale/offer price or discount
       orderBy = [{ salePrice: 'desc' }, { regularPrice: 'asc' }];
       break;
     default:
@@ -312,18 +426,33 @@ export const getCategoryProducts = async (slug, query = {}, userId = null) => {
         id: true,
         name: true,
         slug: true,
+        brand: true,
+        rating: true,
+        reviewCount: true,
         regularPrice: true,
         salePrice: true,
         offerPrice: true,
         images: {
-          where: { isThumbnail: true },
-          take: 1,
+          orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
+          take: 2,
           select: { url: true },
         },
         variants: {
           where: { isActive: true },
-          take: 1,
-          select: { id: true },
+          select: {
+            id: true,
+            attributes: {
+              select: {
+                attributeValue: {
+                  select: {
+                    value: true,
+                    slug: true,
+                    attribute: { select: { slug: true } },
+                  },
+                },
+              },
+            },
+          },
         },
         modifierGroups: {
           take: 1,
@@ -353,12 +482,30 @@ export const getCategoryProducts = async (slug, query = {}, userId = null) => {
     const requiresConfiguration = hasVariants || hasModifiers;
     const price = formatPrice(p.regularPrice, p.salePrice, p.offerPrice);
 
+    // Extract distinct color swatches
+    const colors = [];
+    const seenColors = new Set();
+    p.variants.forEach((v) => {
+      v.attributes?.forEach((a) => {
+        const val = a.attributeValue;
+        if (val && val.attribute?.slug === 'color' && !seenColors.has(val.slug)) {
+          seenColors.add(val.slug);
+          colors.push({ name: val.value, slug: val.slug });
+        }
+      });
+    });
+
     return {
       id: p.id,
       name: p.name,
       slug: p.slug,
+      brand: p.brand,
+      rating: p.rating,
+      reviewCount: p.reviewCount,
       thumbnail: p.images[0]?.url || null,
+      secondaryImage: p.images[1]?.url || null,
       price,
+      colors,
       hasVariants,
       hasModifiers,
       requiresConfiguration,

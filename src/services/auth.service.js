@@ -21,7 +21,7 @@ export class AuthService {
   /**
    * Register a new user (Customer or Admin)
    */
-  static async register({ name, email, password, phone, avatarUrl = null }) {
+  static async register({ name, email, password, phone, avatarUrl = null, userAgent = null, ipAddress = null }) {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user already exists
@@ -62,7 +62,34 @@ export class AuthService {
       },
     });
 
-    return user;
+    // Generate JWT access token for immediate auto-login
+    const accessToken = generateAccessToken({
+      id: user.id,
+      role: user.role,
+      email: user.email,
+    });
+
+    // Generate cryptographically random refresh token
+    const rawRefreshToken = generateRefreshToken();
+    const tokenHash = hashToken(rawRefreshToken);
+    const expiresAt = new Date(Date.now() + AUTH_CONSTANTS.COOKIE_MAX_AGE_MS);
+
+    // Persist refresh token in database
+    await prisma.refreshToken.create({
+      data: {
+        tokenHash,
+        userId: user.id,
+        expiresAt,
+        userAgent,
+        ipAddress,
+      },
+    });
+
+    return {
+      user,
+      accessToken,
+      refreshToken: rawRefreshToken,
+    };
   }
 
   /**
