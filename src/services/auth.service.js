@@ -163,6 +163,8 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatarUrl: user.avatarUrl || null,
+        phone: user.phone || null,
       },
       accessToken,
       refreshToken: rawRefreshToken,
@@ -220,6 +222,8 @@ export class AuthService {
             email: true,
             name: true,
             role: true,
+            avatarUrl: true,
+            phone: true,
             isActive: true,
           },
         },
@@ -270,7 +274,14 @@ export class AuthService {
     return {
       accessToken: newAccessToken,
       refreshToken: newRawRefreshToken,
-      user: existingToken.user,
+      user: {
+        id: existingToken.user.id,
+        name: existingToken.user.name,
+        email: existingToken.user.email,
+        role: existingToken.user.role,
+        avatarUrl: existingToken.user.avatarUrl || null,
+        phone: existingToken.user.phone || null,
+      },
     };
   }
 
@@ -434,6 +445,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         avatarUrl: user.avatarUrl,
+        phone: user.phone || null,
         role: user.role,
       },
       accessToken,
