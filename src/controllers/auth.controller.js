@@ -212,7 +212,7 @@ export class AuthController {
         data: {
           user,
           accessToken,
-          refreshToken,
+          refreshToken: newRefreshToken,
         },
       });
     } catch (error) {
